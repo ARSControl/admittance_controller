@@ -45,7 +45,7 @@ AdmittanceController::AdmittanceController(Eigen::Matrix<double, 6, 6> Mdes, Eig
         jacobian_[i].resize(n_joints_);
 
     // Initialize low-pass filter for acceleration
-    ddx_filter_ = new andrea_filters::RCFilter(6, 30, ts_);
+    ddx_filter_ = new RCFilter(6, 30, ts_);
 
     // Initialize admittance control parameters
     admittance_active_ = false;
@@ -119,7 +119,7 @@ void AdmittanceController::setDeadZone(double &dead_zone_force, double &dead_zon
 // Method to set filter parameters
 void AdmittanceController::setFilterParams(double &cutoff)
 {
-    ddx_filter_ = new andrea_filters::RCFilter(6, cutoff, ts_);
+    ddx_filter_ = new RCFilter(6, cutoff, ts_);
 }
 
 // Method to apply dead zone to a signal
@@ -288,4 +288,6 @@ Eigen::MatrixXd AdmittanceController::computeAcceleration()
     // I do not know if it make sense to compute ddq in another function
     // Maybe if we want to implement admittance control on a torque controlled robot?
     // For know this function is empty and it is private
+    Eigen::MatrixXd matrix;
+    return matrix;
 }

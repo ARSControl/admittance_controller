@@ -2,7 +2,7 @@
 #define ADMITTANCE_CONTROLLER_H
 
 #include <manipulator_kdl/manipulator_kdl.h>
-#include <andrea_filters/RCFilter.h>
+#include <filters/RCFilter.h>
 
 #include <Eigen/Dense>
 #include <Eigen/QR>
@@ -54,7 +54,7 @@ private:
 	geometry_msgs::Pose p_real_;
 	geometry_msgs::Pose p_des_;
 
-	andrea_filters::RCFilter *ddx_filter_;
+	RCFilter *ddx_filter_;
 	bool admittance_active_;
 	bool state_updated_;
 	double dead_zone_force_;

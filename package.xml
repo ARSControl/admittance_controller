@@ -18,6 +18,6 @@
   <exec_depend>std_msgs</exec_depend>
   
   <depend>manipulator_kdl</depend>
-  <depend>andrea_filters</depend>
+  <depend>filters</depend>
 
 </package>
