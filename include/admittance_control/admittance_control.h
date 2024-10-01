@@ -10,17 +10,6 @@
 
 #include <admittance_controller/admittance_controller.h>
 
-// #include <manipulator_kdl/manipulator_kdl.h>
-// #include <andrea_filters/RCFilter.h>
-
-// #include <Eigen/Dense>
-// #include <Eigen/QR>
-// #include <Eigen/Geometry>
-
-// const int N_JOINTS = 6;
-// const double ts_ = 1.0 / 500.0;
-// const std::string manipulator_name = "ur5e";
-
 class AdmittanceControl
 {
 public:

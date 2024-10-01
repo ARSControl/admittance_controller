@@ -115,8 +115,6 @@ void AdmittanceController::computeDeadSignal(Eigen::Matrix<double, 6, 1> &f, dou
         f(i, 0) = cutSignal(f(i, 0), dead_zone_force);
         f(i + 3, 0) = cutSignal(f(i + 3, 0), dead_zone_torque);
     }
-    // f = f.unaryExpr([this, dead_zone](double val)
-    //                 { return this->cutSignal(val, dead_zone); });
 }
 
 void AdmittanceController::computeError(geometry_msgs::Pose &preal, geometry_msgs::Pose &pdes, Eigen::Matrix<double, 6, 1> &err)
