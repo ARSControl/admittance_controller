@@ -43,7 +43,7 @@ AdmittanceController::AdmittanceController(Eigen::Matrix<double, 6, 6> Mdes, Eig
     dead_zone_torque_ = 0.5;
 }
 
-bool AdmittanceController::changeParameters(Eigen::Matrix<double, 6, 6> Mdes, Eigen::Matrix<double, 6, 6> Bdes)
+bool AdmittanceController::changeParameters(Eigen::Matrix<double, 6, 6> &Mdes, Eigen::Matrix<double, 6, 6> &Bdes)
 {
     if (Mdes.rows() + Mdes.cols() + Bdes.rows() + Bdes.cols() != 24)
         return false;
@@ -82,23 +82,23 @@ void AdmittanceController::disableAdmittance()
     dx_.setZero();
 }
 
-void AdmittanceController::changeInternalP(Eigen::Matrix<double, 6, 6> Kint)
+void AdmittanceController::changeInternalP(Eigen::Matrix<double, 6, 6> &Kint)
 {
     K_int_ = Kint;
 }
 
-void AdmittanceController::setDeadZone(double dead_zone_force, double dead_zone_torque)
+void AdmittanceController::setDeadZone(double &dead_zone_force, double &dead_zone_torque)
 {
     dead_zone_force_ = dead_zone_force;
     dead_zone_torque_ = dead_zone_torque;
 }
 
-void AdmittanceController::setFilterParams(double cutoff)
+void AdmittanceController::setFilterParams(double &cutoff)
 {
     ddx_filter_ = new andrea_filters::RCFilter(6, cutoff, ts_);
 }
 
-double AdmittanceController::cutSignal(double x, double dead_zone)
+double AdmittanceController::cutSignal(double &x, double &dead_zone)
 {
     if (x > dead_zone)
         return x - dead_zone;
@@ -108,7 +108,7 @@ double AdmittanceController::cutSignal(double x, double dead_zone)
         return 0.0;
 }
 
-void AdmittanceController::computeDeadSignal(Eigen::Matrix<double, 6, 1> &f, double dead_zone_force, double dead_zone_torque)
+void AdmittanceController::computeDeadSignal(Eigen::Matrix<double, 6, 1> &f, double &dead_zone_force, double &dead_zone_torque)
 {
     for (uint i = 0; i < 3; i++)
     {
@@ -173,14 +173,14 @@ void AdmittanceController::exponentialMapQuaternion(Eigen::Quaterniond &q)
     }
 }
 
-void AdmittanceController::updateJoints(std::vector<double> q)
+void AdmittanceController::updateJoints(const std::vector<double> &q)
 {
     state_updated_ = true;
     robot_kdl->jac(q, jacobian_);
     robot_kdl->fk(q, p_real_);
 }
 
-Eigen::MatrixXd AdmittanceController::computeSpeed(Eigen::Matrix<double, 6, 1> wrench)
+Eigen::MatrixXd AdmittanceController::computeSpeed(Eigen::Matrix<double, 6, 1> &wrench)
 {
     Eigen::Matrix<double, 6, 1> dx_des = Eigen::MatrixXd::Zero(6, 1);
     Eigen::Matrix<double, 6, 1> ddx_des = Eigen::MatrixXd::Zero(6, 1);
@@ -188,7 +188,7 @@ Eigen::MatrixXd AdmittanceController::computeSpeed(Eigen::Matrix<double, 6, 1> w
     return computeSpeed(wrench, x_des, dx_des, ddx_des);
 }
 
-Eigen::MatrixXd AdmittanceController::computeSpeed(Eigen::Matrix<double, 6, 1> wrench, Eigen::Matrix<double, 7, 1> xdes, Eigen::Matrix<double, 6, 1> dx_des, Eigen::Matrix<double, 6, 1> ddx_des)
+Eigen::MatrixXd AdmittanceController::computeSpeed(Eigen::Matrix<double, 6, 1> &wrench, Eigen::Matrix<double, 7, 1> &xdes, Eigen::Matrix<double, 6, 1> &dx_des, Eigen::Matrix<double, 6, 1> &ddx_des)
 {
     if (!admittance_active_)
         return dq_;

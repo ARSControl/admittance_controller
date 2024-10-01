@@ -12,22 +12,22 @@ class AdmittanceController
 {
 public:
 	AdmittanceController(Eigen::Matrix<double, 6, 6> Mdes, Eigen::Matrix<double, 6, 6> Kdes, Eigen::Matrix<double, 6, 6> Bdes, std::string name, int n_joints, double ts);
-	Eigen::MatrixXd computeSpeed(Eigen::Matrix<double, 6, 1> wrench, Eigen::Matrix<double, 7, 1> xdes, Eigen::Matrix<double, 6, 1> dx_des, Eigen::Matrix<double, 6, 1> ddx_des);
-	Eigen::MatrixXd computeSpeed(Eigen::Matrix<double, 6, 1> wrench);
-	void updateJoints(std::vector<double> q);
-	bool changeParameters(Eigen::Matrix<double, 6, 6> Mdes, Eigen::Matrix<double, 6, 6> Bdes);
-	void changeInternalP(Eigen::Matrix<double, 6, 6> Kint);
+	Eigen::MatrixXd computeSpeed(Eigen::Matrix<double, 6, 1> &wrench, Eigen::Matrix<double, 7, 1> &xdes, Eigen::Matrix<double, 6, 1> &dx_des, Eigen::Matrix<double, 6, 1> &ddx_des);
+	Eigen::MatrixXd computeSpeed(Eigen::Matrix<double, 6, 1> &wrench);
+	void updateJoints(const std::vector<double> &q);
+	bool changeParameters(Eigen::Matrix<double, 6, 6> &Mdes, Eigen::Matrix<double, 6, 6> &Bdes);
+	void changeInternalP(Eigen::Matrix<double, 6, 6> &Kint);
 	void enableAdmittance();
 	void disableAdmittance();
-	void setDeadZone(double dead_zone_force, double dead_zone_torque);
-	void setFilterParams(double cutoff);
+	void setDeadZone(double &dead_zone_force, double &dead_zone_torque);
+	void setFilterParams(double &cutoff);
 
 private:
 	void computeError(geometry_msgs::Pose &preal, geometry_msgs::Pose &pdes, Eigen::Matrix<double, 6, 1> &err);
 	Eigen::MatrixXd computeAcceleration();
 
-	double cutSignal(double x, double dead_zone);
-	void computeDeadSignal(Eigen::Matrix<double, 6, 1> &f, double dead_zone_force = 5.0, double dead_zone_torque = 2.5);
+	double cutSignal(double &x, double &dead_zone);
+	void computeDeadSignal(Eigen::Matrix<double, 6, 1> &f, double &dead_zone_force, double &dead_zone_torque);
 	void exponentialMapQuaternion(Eigen::Quaterniond &q);
 
 	std::string manipulator_name_;
