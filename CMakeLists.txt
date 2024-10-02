@@ -33,8 +33,3 @@ add_dependencies(admittance_control ${catkin_EXPORTED_TARGETS})
 add_executable(admittance_controller_node src/admittance_control.cpp src/admittance_control_node.cpp)
 target_link_libraries(admittance_controller_node ${catkin_LIBRARIES} admittance_control)
 add_dependencies(admittance_controller_node ${catkin_EXPORTED_TARGETS})
-
-# add_executable(admittance_controller_node src/admittance_control.cpp src/admittance_control_node.cpp)
-# add_executable(admittance_controller_node src/admittance_control_node.cpp)
-# target_link_libraries(admittance_controller_node ${catkin_LIBRARIES} admittance_controller rc_filter)
-# add_dependencies(admittance_controller_node ${catkin_EXPORTED_TARGETS} admittance_controller)

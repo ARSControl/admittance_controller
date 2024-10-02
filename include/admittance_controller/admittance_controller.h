@@ -54,7 +54,7 @@ private:
 	geometry_msgs::Pose p_real_;
 	geometry_msgs::Pose p_des_;
 
-	RCFilter *ddx_filter_;
+	filters::RCFilter *ddx_filter_;
 	bool admittance_active_;
 	bool state_updated_;
 	double dead_zone_force_;

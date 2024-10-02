@@ -45,7 +45,7 @@ AdmittanceController::AdmittanceController(Eigen::Matrix<double, 6, 6> Mdes, Eig
         jacobian_[i].resize(n_joints_);
 
     // Initialize low-pass filter for acceleration
-    ddx_filter_ = new RCFilter(6, 30, ts_);
+    ddx_filter_ = new filters::RCFilter(6, 30, ts_);
 
     // Initialize admittance control parameters
     admittance_active_ = false;
@@ -119,7 +119,7 @@ void AdmittanceController::setDeadZone(double &dead_zone_force, double &dead_zon
 // Method to set filter parameters
 void AdmittanceController::setFilterParams(double &cutoff)
 {
-    ddx_filter_ = new RCFilter(6, cutoff, ts_);
+    ddx_filter_ = new filters::RCFilter(6, cutoff, ts_);
 }
 
 // Method to apply dead zone to a signal
