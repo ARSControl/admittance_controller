@@ -27,5 +27,5 @@ add_library(admittance_controller
 target_link_libraries(admittance_controller ${catkin_LIBRARIES})
 
 add_executable(admittance_controller_node src/admittance_control.cpp src/admittance_control_node.cpp)
-target_link_libraries(admittance_controller_node ${catkin_LIBRARIES} admittance_controller  andrea_filters)
+target_link_libraries(admittance_controller_node ${catkin_LIBRARIES} admittance_controller)
 add_dependencies(admittance_controller_node ${catkin_EXPORTED_TARGETS} admittance_controller)
