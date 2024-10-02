@@ -34,7 +34,7 @@ Compile the repo:
 
 Alternatively, you can compile using the command
 
-    catkin_make
+    catkin_make (or catkin_make_isolated)
 
 ## How to use
 
@@ -42,7 +42,7 @@ TODO
 
 ### Optimized compiler
 
-If you want to speed your code running performances, you can add the following lines to the CMakeLists.txt of this package:
+If you want to speed your code running performances, you can add the following lines to the "CMakeLists".txt of this package:
 
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
@@ -52,7 +52,7 @@ Or alternatively:
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
 
-Your code should run faster, despite the longer compiler time needed.
+Your code should run faster, despite the longer compiler time needed. By default, O3 is set. You can maually comment it, but it's strongly suggested to use it.
 
 ## Issues
 
