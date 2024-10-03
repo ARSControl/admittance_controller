@@ -10,7 +10,9 @@ int main(int argc, char **argv)
 
 	while (ros::ok())
 	{
+    	ros::Time start = ros::Time::now();
 		ce.spinner();
+    	ROS_INFO("Total duration of the computations: %f", ros::Time::now().toSec()-start.toSec());
 		r.sleep();
 	}
 
