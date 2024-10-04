@@ -1,4 +1,32 @@
+/*
+	MIT License
+
+	Copyright (c) [2024] [Andrea Pupa] [Italo Almirante]
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	SOFTWARE.
+*/
+
+// IMPORT LIBRARIES
 #include "admittance_control/admittance_control.h"
+
+// --------------------- PUBLIC CONSTRUCTOR ---------------------
+double AdmittanceControl::mean = 0.0;   // Mean static variable for the control time computation
 
 // Constructor for the AdmittanceControl class
 AdmittanceControl::AdmittanceControl()
@@ -85,12 +113,58 @@ bool AdmittanceControl::enableAdmittance(std_srvs::SetBool::Request &req, std_sr
 // Main loop to compute and publish joint velocities
 void AdmittanceControl::spinner()
 {
-    ros::spinOnce();
-    auto dq = adm_controller_->computeSpeed(wrench_);
-    std_msgs::Float64MultiArray joint_vel;
-    for (uint i = 0; i < dq.rows(); i++)
-        joint_vel.data.push_back(dq(i, 0));
+    // Number of samples for mean computation
+    unsigned long long int k = 0;           
+    
+    // Override the default ros sigint handler.
+    // This must be set after the first NodeHandle is created.
+    signal(SIGINT, shutdown_handler);
 
-    // Publish joint velocities
+    // Set ROS rate
+	ros::Rate r(500);
+
+    // ROS loop
+	while (ros::ok())
+	{
+        // Listen to callbacks
+        ros::spinOnce();
+
+        // Start loop time measurement
+        ros::Time start = ros::Time::now();
+
+        // Execute the main computations of the admittance control
+        admittance_control_main();
+
+        // Update mean computation
+        // ROS_INFO("Total duration of the computations: %f", ros::Time::now().toSec()-start.toSec());
+        double sample_k = ros::Time::now().toSec()-start.toSec();
+        k++;
+        mean = 1/(static_cast<double>(k))*(sample_k+mean*static_cast<double>(k-1));
+
+        // Wait for the next iteration
+		r.sleep();
+	}
+}
+
+// Shutdown handler
+void AdmittanceControl::shutdown_handler(int sig)
+{
+  // Show the result of the admittance control mean duration
+  ROS_INFO("Mean duration of the admittance control computations: %f", mean);
+  ros::Duration(1.0).sleep();
+
+  // Shutdown ROS
+  ros::shutdown();
+}
+
+// Main control loop function
+void AdmittanceControl::admittance_control_main()
+{
+    // Compute the speed of the robot according to the given wrench
+    auto dq = adm_controller_->computeSpeed(wrench_);
+    // Convert the vel msg as ROS msg
+    std_msgs::Float64MultiArray joint_vel;
+    for (uint i = 0; i < dq.rows(); i++)    {joint_vel.data.push_back(dq(i, 0));}
+    // Send the command to the robot
     joint_vel_pub_.publish(joint_vel);
 }

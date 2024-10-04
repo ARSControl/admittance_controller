@@ -1,20 +1,44 @@
+/*
+	MIT License
+
+	Copyright (c) [2024] [Andrea Pupa] [Italo Almirante]
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	SOFTWARE.
+*/
+
+// IMPORT LIBRARIES
 #include "admittance_control/admittance_control.h"
 
+// MAIN FUNCTION
 int main(int argc, char **argv)
 {
+	// Init the node name
+	std::string node_name = "admittance_control_node";
 
-	ros::init(argc, argv, "admittance_control");
+	// Initialize node
+	ros::init(argc, argv, node_name);
 
-	AdmittanceControl ce;
-	ros::Rate r(500);
+  // Istantiate an object of the class AdmittanceControl
+	AdmittanceControl ac;
 
-	while (ros::ok())
-	{
-    	ros::Time start = ros::Time::now();
-		ce.spinner();
-    	ROS_INFO("Total duration of the computations: %f", ros::Time::now().toSec()-start.toSec());
-		r.sleep();
-	}
+	ac.spinner();
 
+	// File end
 	return 0;
 }
