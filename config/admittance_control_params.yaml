@@ -18,6 +18,12 @@ joint_names:      ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "
 
 mode:             "moveit"                              # Planner of the moves (can be also "kdl")
 
-command_topic:    "manipulator/cmd_vel"                 # "/ur_rtde/controllers/joint_velocity_controller/command" default
+command_topic:    "manipulator/cmd_vel"                 # vel command to the manipulator's ee, default
+                                                        # "/ur_rtde/controllers/joint_velocity_controller/command"
 
-force_topic:      "/ur_rtde/ft_sensor"                  # "/ur_rtde/ft_sensor" default
+force_topic:      "/ur_rtde/ft_sensor"                  # force sensor reading topic, default "/ur_rtde/ft_sensor"
+
+zero_ft_topic:    "/ur_rtde/zeroFTSensor"               # server to reset the force/torque sensor, default
+                                                        # "/ur_rtde/zeroFTSensor"
+
+ee_pose_topic:    "/manipulator/tcp_pose"               # topic to read tcp pose, default "/ur_rtde/cartesian_pose"

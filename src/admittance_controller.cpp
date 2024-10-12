@@ -24,97 +24,11 @@
 
 #include "admittance_controller/admittance_controller.h"
 
-// Constructor: initializes controller parameters from YAML or defaults
-AdmittanceController::AdmittanceController()
-{
-    // Load diagonal parameters for mass, spring, and damping
-    double m_d, k_d, b_d;
-    if (!nh.getParam("/admittance_controller/m_d", m_d))
-    {
-        ROS_WARN("Diagonal mass 'm_d' not set, using default value of 1.0.");
-        m_d = 1.0; // Default
-    }
-    if (!nh.getParam("/admittance_controller/k_d", k_d))
-    {
-        ROS_WARN("Diagonal spring constant 'k_d' not set, using default value of 100.0.");
-        k_d = 100.0; // Default
-    }
-    if (!nh.getParam("/admittance_controller/b_d", b_d))
-    {
-        ROS_WARN("Diagonal damping constant 'b_d' not set, using default value of 10.0.");
-        b_d = 10.0; // Default
-    }
-
-    // Initialize matrices with the diagonal values
-    M_des_ = Eigen::MatrixXd::Identity(6, 6) * m_d;
-    K_des_ = Eigen::MatrixXd::Identity(6, 6) * k_d;
-    B_des_ = Eigen::MatrixXd::Identity(6, 6) * b_d;
-
-    // Load additional parameters
-    if (!nh.getParam("/admittance_controller/loop_rate", loop_rate_))
-    {
-        ROS_WARN("Loop rate not set, using default: 500 Hz.");
-        loop_rate_ = 500.0; // Default 500 Hz
-    }
-
-    if (!nh.getParam("/admittance_controller/force_limit", force_limit_))
-    {
-        ROS_WARN("Force limit not set, using default values.");
-        force_limit_ = Eigen::VectorXd::Constant(6, 100.0); // Default limits
-    }
-
-    if (!nh.getParam("/admittance_controller/manipulator_name", manipulator_name_))
-    {
-        ROS_WARN("Manipulator name not set, using default: ur5.");
-        manipulator_name_ = "ur5"; // Default
-    }
-
-    if (!nh.getParam("/admittance_controller/joint_names", joint_names_))
-    {
-        ROS_WARN("Joint names not set, using default names.");
-        joint_names_ = {"shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"}; // Default UR5 joints
-    }
-
-    n_joints_ = joint_names_.size();
-
-    // Additional initialization logic
-}
-
-void AdmittanceController::publishControl()
-{
-    if      (mode_ == "moveit")
-    {
-        // Publish Cartesian velocity to manipulator_name/cmd_vel
-        // TODO: Logic for MoveIt mode
-    }
-    else if (mode_ == "kdl")
-    {
-        // Convert to joint velocities and publish to joint velocity controller
-        // TODO: Logic for KDL mode
-    }
-    else
-    {
-        ROS_ERROR("Unknown control mode: %s. Closing the node ...", mode.c_str());
-        ros::shutdown();
-    }
-}
-
-
-
-
-
-
-
-
-
-
-// VECCHIO CODICE
-
-#include "admittance_controller/admittance_controller.h"
-
 // Constructor for the AdmittanceController class
-AdmittanceController::AdmittanceController(Eigen::Matrix<double, n_joints, n_joints> Mdes, Eigen::Matrix<double, 6, 6> Kdes, Eigen::Matrix<double, 6, 6> Bdes,
-                                           std::string manipulator_name, int n_joints, double ts)
+AdmittanceController::AdmittanceController(Eigen::Matrix<double, n_joints, n_joints> Mdes,
+                                           Eigen::Matrix<double, n_joints, n_joints> Kdes, 
+                                           Eigen::Matrix<double, n_joints, n_joints> Bdes,
+                                           std::string manipulator_name,        double ts)
 {
     // Initialize desired mass, damping, and stiffness matrices
     M_des_ = Mdes;
@@ -126,8 +40,8 @@ AdmittanceController::AdmittanceController(Eigen::Matrix<double, n_joints, n_joi
     robot_kdl = new ManipulatorKDL(manipulator_name_);
 
     // Initialize number of joints and time step
-    n_joints_ = n_joints;
-    ts_ = ts;
+    n_joints_   = M_des;
+    ts_         = ts;
 
     // Resize and initialize joint position, velocity, and acceleration vectors
     joint_position_.resize(n_joints, 1);
@@ -182,13 +96,6 @@ bool AdmittanceController::changeParameters(Eigen::Matrix<double, 6, 6> &Mdes, E
 // Method to enable admittance control
 void AdmittanceController::enableAdmittance()
 {
-    // Check if the state has been updated
-    if (!state_updated_)
-    {
-        std::cout << "Error: You should update the state by calling updateJoints()!" << std::endl;
-        return;
-    }
-
     // Reset velocities and filter
     dq_.setZero();
     dx_.setZero();
@@ -211,7 +118,6 @@ void AdmittanceController::enableAdmittance()
 void AdmittanceController::disableAdmittance()
 {
     admittance_active_ = false;
-    state_updated_ = false;
     dq_.setZero();
     dx_.setZero();
 }
@@ -315,37 +221,26 @@ void AdmittanceController::exponentialMapQuaternion(Eigen::Quaterniond &q)
 // Method to update joint states
 void AdmittanceController::updateJoints(const std::vector<double> &q)
 {
-    state_updated_ = true;
     robot_kdl->jac(q, jacobian_);
     robot_kdl->fk(q, p_real_);
-}
-
-// Method to compute joint velocities based on wrench input
-Eigen::MatrixXd AdmittanceController::computeSpeed(Eigen::Matrix<double, 6, 1> &wrench)
-{
-    Eigen::Matrix<double, 6, 1> dx_des = Eigen::MatrixXd::Zero(6, 1);
-    Eigen::Matrix<double, 6, 1> ddx_des = Eigen::MatrixXd::Zero(6, 1);
-    Eigen::Matrix<double, 7, 1> x_des = Eigen::MatrixXd::Zero(7, 1);
-    return computeSpeed(wrench, x_des, dx_des, ddx_des);
 }
 
 // Overloaded method to compute joint velocities based on wrench, desired pose, and desired velocities
 Eigen::MatrixXd AdmittanceController::computeSpeed(Eigen::Matrix<double, 6, 1> &wrench, Eigen::Matrix<double, 7, 1> &xdes, Eigen::Matrix<double, 6, 1> &dx_des, Eigen::Matrix<double, 6, 1> &ddx_des)
 {
-    if (!admittance_active_)
-        return dq_;
+    if (!admittance_active_)    {return dq_;}
 
     wrench_ = wrench;
     computeDeadSignal(wrench_, dead_zone_force_, dead_zone_torque_);
 
-    p_des_.position.x = xdes(0, 0);
-    p_des_.position.y = xdes(1, 0);
-    p_des_.position.z = xdes(2, 0);
+    p_des_.position.x = xdes(0);
+    p_des_.position.y = xdes(1);
+    p_des_.position.z = xdes(2);
 
-    p_des_.orientation.w = xdes(3, 0);
-    p_des_.orientation.x = xdes(4, 0);
-    p_des_.orientation.y = xdes(5, 0);
-    p_des_.orientation.z = xdes(6, 0);
+    p_des_.orientation.w = xdes(3);
+    p_des_.orientation.x = xdes(4);
+    p_des_.orientation.y = xdes(5);
+    p_des_.orientation.z = xdes(6);
 
     computeError(p_real_, p_des_, err_);
 
@@ -354,7 +249,7 @@ Eigen::MatrixXd AdmittanceController::computeSpeed(Eigen::Matrix<double, 6, 1> &
         ddx_tmp = std::vector<double>(ddx_.data(), ddx_.data() + ddx_.size());
     ddx_filter_->filter(ddx_tmp);
     for (uint i = 0; i < 6; i++)
-        ddx_(i, 0) = ddx_tmp[i];
+        ddx_(i) = ddx_tmp[i];
     dx_ = dx_ + ddx_ * ts_;
 
     for (uint i = 0; i < 6; i++)
@@ -396,11 +291,15 @@ Eigen::MatrixXd AdmittanceController::computeSpeed(Eigen::Matrix<double, 6, 1> &
     return dq_;
 }
 
+
+
+// OK DOWN HERE !!!!!
+
+
+// TODO: empty private function to compute acceleration, still not implemented
 Eigen::MatrixXd AdmittanceController::computeAcceleration()
 {
-    // I do not know if it make sense to compute ddq in another function
-    // Maybe if we want to implement admittance control on a torque controlled robot?
-    // For know this function is empty and it is private
+    // Maybe if implementing the admittance control on a torque controlled robot will be needed
     Eigen::MatrixXd matrix;
     return matrix;
 }

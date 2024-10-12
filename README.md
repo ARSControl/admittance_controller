@@ -2,6 +2,7 @@
 
 [[Ars Control Lab page]](https://www.arscontrol.unimore.it/)
 [[Andrea Pupa]](https://www.arscontrol.unimore.it/andrea-pupa/)
+[[Italo Almirante]](https://www.arscontrol.unimore.it/italo-almirante/)
 
 This library provides the interface between the robot model and a custom admittance controller implementation. 
 
