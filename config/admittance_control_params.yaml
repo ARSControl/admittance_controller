@@ -1,0 +1,23 @@
+# Parameters for the admittance control
+
+manipulator:      "ur5"                                 # Robot name
+
+manipulator_name: "manipulator"                         # Robot planner group name
+
+m_d:              [2.5,   2.5,  2.5, 0.05, 0.05, 0.05]  # Diagonal mass values (kg)
+
+k_d:              [25.0, 25.0, 25.0,  0.5,  0.5,  0.5]  # Diagonal spring stiffness (N/m)
+
+b_d:              [5.0,   5.0,  5.0,  0.1,  0.1,  0.1]  # Diagonal damping coefficient (Ns/m)
+
+loop_rate:        500.0                                 # Hz
+
+force_limit:      [30.0, 30.0, 30.0, 2.0, 2.0, 2.0]     # Force limits (Fx, Fy, Fz, Tx, Ty, Tz)
+
+joint_names:      ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]
+
+mode:             "moveit"                              # Planner of the moves (can be also "kdl")
+
+command_topic:    "manipulator/cmd_vel"                 # "/ur5/joint_group_vel_controller/command"
+
+force_topic:      "/ur_rtde/ft_sensor"                  # "/ur5/joint_group_vel_controller/command"

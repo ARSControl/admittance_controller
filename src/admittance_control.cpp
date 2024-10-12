@@ -1,26 +1,147 @@
-/*
-	MIT License
+/************************************************************************************
+ * MIT License
+ * 
+ * Copyright (c) 2024 [Andrea Pupa] [Italo Almirante]
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ ************************************************************************************/
 
-	Copyright (c) [2024] [Andrea Pupa] [Italo Almirante]
+#include "admittance_control/admittance_control.h"
 
-	Permission is hereby granted, free of charge, to any person obtaining a copy
-	of this software and associated documentation files (the "Software"), to deal
-	in the Software without restriction, including without limitation the rights
-	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-	copies of the Software, and to permit persons to whom the Software is
-	furnished to do so, subject to the following conditions:
+AdmittanceControl::AdmittanceControl(std::string node_name)
+{
+    // Update node params
+    node_name_ = node_name;
+    check_params();
 
-	The above copyright notice and this permission notice shall be included in all
-	copies or substantial portions of the Software.
+    // Subscribe to topics
+    joint_sub_ = nh_.subscribe("/joint_states", 1, &AdmittanceControl::jointCallback, this);
+    force_sub_ = nh_.subscribe("/ur_rtde/ft_sensor", 1, &AdmittanceControl::forceSensorCallback, this);
 
-	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-	SOFTWARE.
-*/
+    // Load and apply parameters
+    nh.getParam("/admittance_control/command_topic", command_topic_);
+    joint_vel_pub_ = nh.advertise<std_msgs::Float64MultiArray>(command_topic_, 1);
+
+    // Initialize controller
+    adm_controller_ = new AdmittanceController(nh);
+
+    // Additional logic for initializing force, wrenches, etc.
+}
+
+void AdmittanceControl::check_param()
+{
+
+    // Load diagonal parameters for mass, spring, and damping
+    double m_d, k_d, b_d;
+    if (!nh.getParam(node_name_+"m_d", m_d))
+    {
+        ROS_WARN("Diagonal mass 'm_d' not set, using default value of 1.0.");
+        m_d = 1.0; // Default
+    }
+    if (!nh.getParam(node_name_+"k_d", k_d))
+    {
+        ROS_WARN("Diagonal spring constant 'k_d' not set, using default value of 100.0.");
+        k_d = 100.0; // Default
+    }
+    if (!nh.getParam(node_name_+"b_d", b_d))
+    {
+        ROS_WARN("Diagonal damping constant 'b_d' not set, using default value of 10.0.");
+        b_d = 10.0; // Default
+    }
+
+    // Initialize matrices with the diagonal values
+    M_des_ = Eigen::MatrixXd::Identity(6, 6) * m_d;
+    K_des_ = Eigen::MatrixXd::Identity(6, 6) * k_d;
+    B_des_ = Eigen::MatrixXd::Identity(6, 6) * b_d;
+
+    // Load additional parameters
+    if (!nh.getParam("/admittance_controller/loop_rate", loop_rate_))
+    {
+        ROS_WARN("Loop rate not set, using default: 500 Hz.");
+        loop_rate_ = 500.0; // Default 500 Hz
+    }
+
+    if (!nh.getParam("/admittance_controller/force_limit", force_limit_))
+    {
+        ROS_WARN("Force limit not set, using default values.");
+        force_limit_ = Eigen::VectorXd::Constant(6, 100.0); // Default limits
+    }
+
+    if (!nh.getParam("/admittance_controller/manipulator_name", manipulator_name_))
+    {
+        ROS_WARN("Manipulator name not set, using default: ur5.");
+        manipulator_name_ = "ur5"; // Default
+    }
+
+    if (!nh.getParam("/admittance_controller/joint_names", joint_names_))
+    {
+        ROS_WARN("Joint names not set, using default names.");
+        joint_names_ = {"shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"}; // Default UR5 joints
+    }
+
+    n_joints_ = joint_names_.size();
+}
+
+void AdmittanceControl::jointCallback(const sensor_msgs::JointState::ConstPtr& msg)
+{
+    // Update joint states in controller
+    adm_controller_->updateJoints(msg->position);
+}
+
+void AdmittanceControl::spinner()
+{
+    ros::Rate rate(500); // Loop rate from parameters
+
+    while (ros::ok())
+    {
+        ros::spinOnce();
+        adm_controller_->publishControlMode("kdl"); // or "moveit"
+        rate.sleep();
+    }
+}
+
+// Additional methods...
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// VECCHIO CODICE
+
+
+
 
 // IMPORT LIBRARIES
 #include "admittance_control/admittance_control.h"

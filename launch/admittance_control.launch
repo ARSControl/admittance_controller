@@ -1,0 +1,11 @@
+<!-- launch/admittance_controller.launch -->
+
+<launch>
+  <rosparam file="$(find admittance_controller)/config/admittance_controller_params.yaml"
+            command="load"/>
+  
+  <node name="admittance_control"       pkg="admittance_control"
+        type="admittance_control_node"  output="screen">
+  </node>
+
+</launch>

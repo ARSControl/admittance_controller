@@ -35,7 +35,7 @@ int main(int argc, char **argv)
 	ros::init(argc, argv, node_name);
 
   // Istantiate an object of the class AdmittanceControl
-	AdmittanceControl ac;
+	AdmittanceControl ac(node_name);
 
 	ac.spinner();
 

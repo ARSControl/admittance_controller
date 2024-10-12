@@ -56,4 +56,4 @@ Your code should run faster, despite the longer compiler time needed. By default
 
 ## Issues
 
-Please if you have any issue in compiling the nodes or using it, you can open an issue on git or send me an email at my email address: andrea.pupa@unimore.it.
+Please if you have any issue in compiling the nodes or using them, you can open an issue on git or send me an email at my email address: andrea.pupa@unimore.it.

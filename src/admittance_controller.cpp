@@ -1,7 +1,120 @@
+/************************************************************************************
+ * MIT License
+ * 
+ * Copyright (c) 2024 [Andrea Pupa] [Italo Almirante]
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ ************************************************************************************/
+
+#include "admittance_controller/admittance_controller.h"
+
+// Constructor: initializes controller parameters from YAML or defaults
+AdmittanceController::AdmittanceController()
+{
+    // Load diagonal parameters for mass, spring, and damping
+    double m_d, k_d, b_d;
+    if (!nh.getParam("/admittance_controller/m_d", m_d))
+    {
+        ROS_WARN("Diagonal mass 'm_d' not set, using default value of 1.0.");
+        m_d = 1.0; // Default
+    }
+    if (!nh.getParam("/admittance_controller/k_d", k_d))
+    {
+        ROS_WARN("Diagonal spring constant 'k_d' not set, using default value of 100.0.");
+        k_d = 100.0; // Default
+    }
+    if (!nh.getParam("/admittance_controller/b_d", b_d))
+    {
+        ROS_WARN("Diagonal damping constant 'b_d' not set, using default value of 10.0.");
+        b_d = 10.0; // Default
+    }
+
+    // Initialize matrices with the diagonal values
+    M_des_ = Eigen::MatrixXd::Identity(6, 6) * m_d;
+    K_des_ = Eigen::MatrixXd::Identity(6, 6) * k_d;
+    B_des_ = Eigen::MatrixXd::Identity(6, 6) * b_d;
+
+    // Load additional parameters
+    if (!nh.getParam("/admittance_controller/loop_rate", loop_rate_))
+    {
+        ROS_WARN("Loop rate not set, using default: 500 Hz.");
+        loop_rate_ = 500.0; // Default 500 Hz
+    }
+
+    if (!nh.getParam("/admittance_controller/force_limit", force_limit_))
+    {
+        ROS_WARN("Force limit not set, using default values.");
+        force_limit_ = Eigen::VectorXd::Constant(6, 100.0); // Default limits
+    }
+
+    if (!nh.getParam("/admittance_controller/manipulator_name", manipulator_name_))
+    {
+        ROS_WARN("Manipulator name not set, using default: ur5.");
+        manipulator_name_ = "ur5"; // Default
+    }
+
+    if (!nh.getParam("/admittance_controller/joint_names", joint_names_))
+    {
+        ROS_WARN("Joint names not set, using default names.");
+        joint_names_ = {"shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"}; // Default UR5 joints
+    }
+
+    n_joints_ = joint_names_.size();
+
+    // Additional initialization logic
+}
+
+void AdmittanceController::publishControlMode(const std::string& mode)
+{
+    if (mode == "moveit")
+    {
+        // Publish Cartesian velocity to manipulator_name/cmd_vel
+        // Logic for MoveIt mode
+    }
+    else if (mode == "kdl")
+    {
+        // Convert to joint velocities and publish to joint velocity controller
+        // Logic for KDL mode
+    }
+    else
+    {
+        ROS_ERROR("Unknown control mode: %s", mode.c_str());
+    }
+}
+
+// Additional methods implementation...
+
+
+
+
+
+
+
+
+
+// VECCHIO CODICE
+
 #include "admittance_controller/admittance_controller.h"
 
 // Constructor for the AdmittanceController class
-AdmittanceController::AdmittanceController(Eigen::Matrix<double, 6, 6> Mdes, Eigen::Matrix<double, 6, 6> Kdes, Eigen::Matrix<double, 6, 6> Bdes, std::string name, int n_joints, double ts)
+AdmittanceController::AdmittanceController(Eigen::Matrix<double, n_joints, n_joints> Mdes, Eigen::Matrix<double, 6, 6> Kdes, Eigen::Matrix<double, 6, 6> Bdes,
+                                           std::string manipulator_name, int n_joints, double ts)
 {
     // Initialize desired mass, damping, and stiffness matrices
     M_des_ = Mdes;
@@ -9,7 +122,7 @@ AdmittanceController::AdmittanceController(Eigen::Matrix<double, 6, 6> Mdes, Eig
     K_des_ = Kdes;
 
     // Initialize manipulator name and KDL model
-    manipulator_name_ = name;
+    manipulator_name_ = manipulator_name;
     robot_kdl = new ManipulatorKDL(manipulator_name_);
 
     // Initialize number of joints and time step
