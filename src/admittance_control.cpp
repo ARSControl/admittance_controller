@@ -46,9 +46,10 @@ AdmittanceControl::AdmittanceControl(std::string node_name)
     }
     else
     {
-        vel_pub_      = nh.advertise<geometry_msgs::Twist>(command_topic_, 1);
-        tcp_pose_sub_ = nh_.subscribe(manipulator_name_+"/tcp_pose",1,&AdmittanceControl::tcpPoseCallback,this);
+        vel_pub_ = nh.advertise<geometry_msgs::Twist>(command_topic_, 1);
     }
+
+    tcp_pose_sub_ = nh_.subscribe(ee_pose_topic_,1,&AdmittanceControl::tcpPoseCallback,this);
 
     // Advertise service to enable admittance control
     adm_service_ = nh_.advertiseService(manipulator_name_+"/enable_admittance", &AdmittanceControl::enableAdmittance, this);
@@ -157,9 +158,16 @@ void AdmittanceControl::check_param()
         ROS_WARN("Zero force feedback server name param not set, using default: /ur_rtde/zeroFTSensor");
         zero_ft_sensor_topic_ = "/ur_rtde/zeroFTSensor";
     }
+    // Init force feedback topic
+    if (!nh.getParam(node_name_+"/ee_pose_topic", ee_pose_topic_))
+    {
+        ROS_WARN("EE pose topic param not set, using default: /ur_rtde/ft_sensor.");
+        ee_pose_topic_ = "/ur_rtde/cartesian_pose";
+    }
 }
 
-// ---------------------------- UTILS ---------------------------------
+// ---------------------------- UTILS --------------------------
+
 // --------------------- QUATERNIONS HANDLER -------------------
 // Conversion from degrees euler angles to quaternion
 geometry_msgs::Quaternion ManipulatorMenu::quaternion_from_euler(double roll, double pitch, double yaw)
@@ -214,14 +222,13 @@ void AdmittanceControl::tcpPoseCallback(const geometry_msgs::Pose& msg)
 
     // if (mode_bool_ == false) // If manipulator_kdl has been chosen as planning interface
     // {
-    //     robot_kdl->fk(q, ee_pose_);
+    //     robot_kdl->fk(q_, ee_pose_);
     // }
 }
 
 // Joint state callback
 void AdmittanceControl::jointCallback(const sensor_msgs::JointState::ConstPtr& msg)
 {
-    // adm_controller_->updateJoints(msg->position);
     q_(0) = msg->position[0];
     q_(1) = msg->position[1];
     q_(2) = msg->position[2];
@@ -231,15 +238,31 @@ void AdmittanceControl::jointCallback(const sensor_msgs::JointState::ConstPtr& m
 }
 
 // --------------------------- JACOBIAN COMPUTATIONS -----------------------------------
-    if (mode_bool_ == false) // If manipulator_kdl has been chosen as planning interface
+Eigen::MatrixXd AdmittanceControl::getJacobian()
+{
+    Eigen::MatrixXd<double,6,n_joints_> jacobian_eigen;
+    // If manipulator_kdl has been chosen as planning interface
+    if (mode_bool_ == false)
     {
-        robot_kdl->jac(q, jacobian_);
-        robot_kdl->fk(q, p_real_);
+        std::vector<double,double> jacobian;
+        robot_kdl->jac(q_, jacobian);
+
+        for (uint i = 0; i < 6; i++)
+        {
+            for (uint j = 0; j < n_joints_; j++)
+            {
+                jacobian_eigen(i, j) = jacobian[i][j];
+            }
+        }
     }
+    // else anything needed
+    return jacobian_eigen;
+}
 
-
-// ----------------------------- SPEED COMPUTATIONS -----------------------------------
-
+Eigen::MatrixXd AdmittanceControl::getInvJacobian()
+{
+    return getJacobian().completeOrthogonalDecomposition().pseudoInverse();
+}
 
 // SENSORS 
 
@@ -255,10 +278,16 @@ void AdmittanceControl::forceSensorCallback(const geometry_msgs::Wrench::ConstPt
     wrench_(5) = w->torque.z;
 }
 
-//  SETPOINT UPDATE 
-admittanceXdCallback
+// ----------------------------- SETPOINT UPDATE -----------------------------
+void AdmittanceControl::admittanceXdCallback(const geometry_msgs::Pose::ConstPtr &p)
+{
+    xd_(0) = p->position.x;
+    xd_(1) = p->position.y;
+    xd_(2) = p->position.z;
+    std::vector<double> x_rpy = 
+}
 
-// ADMITTANCE ENABLING/DISABLING
+// ----------------------------- ADMITTANCE ENABLER -----------------------------
 
 // Service callback to enable or disable admittance control
 bool AdmittanceControl::enableAdmittance(std_srvs::SetBool::Request  &req,
@@ -281,6 +310,7 @@ bool AdmittanceControl::enableAdmittance(std_srvs::SetBool::Request  &req,
     return true;
 }
 
+// ----------------------------- MAIN FUNCTIONS -----------------------------
 // Shutdown handler
 void AdmittanceControl::shutdown_handler(int sig)
 {
