@@ -80,25 +80,25 @@ AdmittanceController::AdmittanceController()
     // Additional initialization logic
 }
 
-void AdmittanceController::publishControlMode(const std::string& mode)
+void AdmittanceController::publishControl()
 {
-    if (mode == "moveit")
+    if      (mode_ == "moveit")
     {
         // Publish Cartesian velocity to manipulator_name/cmd_vel
-        // Logic for MoveIt mode
+        // TODO: Logic for MoveIt mode
     }
-    else if (mode == "kdl")
+    else if (mode_ == "kdl")
     {
         // Convert to joint velocities and publish to joint velocity controller
-        // Logic for KDL mode
+        // TODO: Logic for KDL mode
     }
     else
     {
-        ROS_ERROR("Unknown control mode: %s", mode.c_str());
+        ROS_ERROR("Unknown control mode: %s. Closing the node ...", mode.c_str());
+        ros::shutdown();
     }
 }
 
-// Additional methods implementation...
 
 
 

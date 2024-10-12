@@ -32,86 +32,138 @@ AdmittanceControl::AdmittanceControl(std::string node_name)
 
     // Subscribe to topics
     joint_sub_ = nh_.subscribe("/joint_states", 1, &AdmittanceControl::jointCallback, this);
-    force_sub_ = nh_.subscribe("/ur_rtde/ft_sensor", 1, &AdmittanceControl::forceSensorCallback, this);
+    force_sub_ = nh_.subscribe(force_feed_topic_, 1, &AdmittanceControl::forceSensorCallback, this);
 
     // Load and apply parameters
-    nh.getParam("/admittance_control/command_topic", command_topic_);
     joint_vel_pub_ = nh.advertise<std_msgs::Float64MultiArray>(command_topic_, 1);
 
     // Initialize controller
-    adm_controller_ = new AdmittanceController(nh);
-
-    // Additional logic for initializing force, wrenches, etc.
+    adm_controller_ = new AdmittanceController();
 }
 
 void AdmittanceControl::check_param()
 {
+    // Init joints
+    n_joints_ = joint_names_.size();
 
-    // Load diagonal parameters for mass, spring, and damping
-    double m_d, k_d, b_d;
-    if (!nh.getParam(node_name_+"m_d", m_d))
-    {
-        ROS_WARN("Diagonal mass 'm_d' not set, using default value of 1.0.");
-        m_d = 1.0; // Default
-    }
-    if (!nh.getParam(node_name_+"k_d", k_d))
-    {
-        ROS_WARN("Diagonal spring constant 'k_d' not set, using default value of 100.0.");
-        k_d = 100.0; // Default
-    }
-    if (!nh.getParam(node_name_+"b_d", b_d))
-    {
-        ROS_WARN("Diagonal damping constant 'b_d' not set, using default value of 10.0.");
-        b_d = 10.0; // Default
-    }
-
-    // Initialize matrices with the diagonal values
-    M_des_ = Eigen::MatrixXd::Identity(6, 6) * m_d;
-    K_des_ = Eigen::MatrixXd::Identity(6, 6) * k_d;
-    B_des_ = Eigen::MatrixXd::Identity(6, 6) * b_d;
-
-    // Load additional parameters
-    if (!nh.getParam("/admittance_controller/loop_rate", loop_rate_))
-    {
-        ROS_WARN("Loop rate not set, using default: 500 Hz.");
-        loop_rate_ = 500.0; // Default 500 Hz
-    }
-
-    if (!nh.getParam("/admittance_controller/force_limit", force_limit_))
-    {
-        ROS_WARN("Force limit not set, using default values.");
-        force_limit_ = Eigen::VectorXd::Constant(6, 100.0); // Default limits
-    }
-
-    if (!nh.getParam("/admittance_controller/manipulator_name", manipulator_name_))
-    {
-        ROS_WARN("Manipulator name not set, using default: ur5.");
-        manipulator_name_ = "ur5"; // Default
-    }
-
-    if (!nh.getParam("/admittance_controller/joint_names", joint_names_))
+    if (!nh.getParam(node_name_+"joint_names", joint_names_))
     {
         ROS_WARN("Joint names not set, using default names.");
         joint_names_ = {"shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"}; // Default UR5 joints
     }
 
-    n_joints_ = joint_names_.size();
+    // Init motion params
+    std::vector<double> m_d, k_d, b_d;
+
+    if (!nh.getParam(node_name_+"m_d", m_d))
+    {
+        ROS_WARN("Diagonal mass 'm_d' not set, using default value of 1.0.");
+        m_d = Eigen::VectorXd::Constant(n_joints_, 1.0);
+    }
+    if (m_d.size() != n_joints)
+    {
+        ROS_WARN("Mass vector has different size of joints, using default value of 1.0.");
+        m_d = Eigen::VectorXd::Constant(n_joints_, 1.0);
+    }
+    if (!nh.getParam(node_name_+"k_d", k_d))
+    {
+        ROS_WARN("Diagonal spring constant 'k_d' not set, using default value of 100.0.");
+        k_d = Eigen::VectorXd::Constant(n_joints_, 100.0);
+    }
+    if (k_d.size() != n_joints)
+    {
+        ROS_WARN("Spring vector has different size of joints, using default value of 1.0.");
+        k_d = Eigen::VectorXd::Constant(n_joints_, 1.0);
+    }
+    if (!nh.getParam(node_name_+"b_d", b_d))
+    {
+        ROS_WARN("Diagonal damping constant 'b_d' not set, using default value of 10.0.");
+        b_d = Eigen::VectorXd::Constant(n_joints_, 10.0);
+    }
+    if (b_d.size() != n_joints)
+    {
+        ROS_WARN("Damping vector has different size of joints, using default value of 1.0.");
+        k_b_dd = Eigen::VectorXd::Constant(n_joints_, 1.0);
+    }
+
+    M_des_ = Eigen::MatrixXd::Zero(n_joints_,n_joints_);
+    K_des_ = Eigen::MatrixXd::Zero(n_joints_,n_joints_);
+    B_des_ = Eigen::MatrixXd::Zero(n_joints_,n_joints_);
+
+    for (uint i = 0; i < n_joints_; i++)
+    {
+        M_des_(i, i) = m_d[i];
+        K_des_(i, i) = k_d[i];
+        B_des_(i, i) = b_d[i];
+    }
+
+    // Init interaction params
+    if (!nh.getParam(node_name_+"/force_limit", force_limit_))
+    {
+        ROS_WARN("Force limit not set, using default values.");
+        force_limit_ = Eigen::VectorXd::Constant(n_joints_, 10.0);
+    }
+    if (force_limit_.size() != n_joints_)
+    {
+        ROS_WARN("Force limit vector has different size of joints, using default value of 10.0.");
+        k_b_dd = Eigen::VectorXd::Constant(n_joints_, 10.0);
+    }
+    if (!nh.getParam(node_name_+"/mode", mode_))
+    {
+        ROS_WARN("Mode param not set, using default: kdl.");
+        mode_ = "kdl";
+    }
+
+    // Init control params
+    if (!nh.getParam(node_name_+"/loop_rate", loop_rate_))
+    {
+        ROS_WARN("Loop rate not set, using default: 500 Hz.");
+        loop_rate_ = 500.0; // Default 500 Hz
+    }
+
+    // Init model params
+    if (!nh.getParam(node_name_+"/manipulator", manipulator_))
+    {
+        ROS_WARN("Manipulator name not set, using default: ur5.");
+        manipulator_name_ = "ur5";
+    }
+
+    if (!nh.getParam(node_name_+"/manipulator_name", manipulator_name_))
+    {
+        ROS_WARN("Manipulator name not set, using default: manipulator.");
+        manipulator_name_ = "manipulator";
+    }
+
+    // Init command topic
+    if (!nh.getParam(node_name_+"/command_topic", command_topic_))
+    {
+        ROS_WARN("Command topic param not set, using default: /ur_rtde/controllers/joint_velocity_controller/command.");
+        command_topic_ = "/ur_rtde/controllers/joint_velocity_controller/command";
+    }
+    // Init force feedback topic
+    if (!nh.getParam(node_name_+"/force_feed_topic", force_feed_topic_))
+    {
+        ROS_WARN("Force feedback topic param not set, using default: /ur_rtde/ft_sensor.");
+        force_feed_topic_ = "/ur_rtde/ft_sensor";
+    }
+
 }
+
+// TODO: continue from here
 
 void AdmittanceControl::jointCallback(const sensor_msgs::JointState::ConstPtr& msg)
 {
-    // Update joint states in controller
     adm_controller_->updateJoints(msg->position);
 }
 
 void AdmittanceControl::spinner()
 {
-    ros::Rate rate(500); // Loop rate from parameters
+    ros::Rate rate(loop_rate_);
 
     while (ros::ok())
     {
         ros::spinOnce();
-        adm_controller_->publishControlMode("kdl"); // or "moveit"
+        adm_controller_->publishControl();
         rate.sleep();
     }
 }

@@ -1,6 +1,6 @@
 # Parameters for the admittance control
 
-manipulator:      "ur5"                                 # Robot name
+manipulator:      "ur5e"                                # Robot name
 
 manipulator_name: "manipulator"                         # Robot planner group name
 
@@ -18,6 +18,6 @@ joint_names:      ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "
 
 mode:             "moveit"                              # Planner of the moves (can be also "kdl")
 
-command_topic:    "manipulator/cmd_vel"                 # "/ur5/joint_group_vel_controller/command"
+command_topic:    "manipulator/cmd_vel"                 # "/ur_rtde/controllers/joint_velocity_controller/command" default
 
-force_topic:      "/ur_rtde/ft_sensor"                  # "/ur5/joint_group_vel_controller/command"
+force_topic:      "/ur_rtde/ft_sensor"                  # "/ur_rtde/ft_sensor" default
