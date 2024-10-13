@@ -71,7 +71,8 @@ Eigen::VectorXd AdmittanceController::computeQSpeed(      Eigen::VectorXd &wrenc
     computeDeadSignal(wrench, dead_zone_force_, dead_zone_torque_);
 
     // Compute pose error
-    Eigen::VectorXd err = computeError(ee_pose, xd);
+    Eigen::VectorXd err = Eigen::VectorXd::Zero(6);
+    err = computeError(ee_pose, xd);
 
     // Compute the acceleration of the system
     Eigen::VectorXd ddx = ddx_des + M_des_.inverse() * (wrench + B_des_ * (dx_des - dx) + K_des_ * err);
@@ -107,7 +108,8 @@ Eigen::VectorXd AdmittanceController::computeEESpeed(     Eigen::VectorXd &wrenc
     computeDeadSignal(wrench, dead_zone_force_, dead_zone_torque_);
 
     // Compute pose error
-    Eigen::VectorXd pose_err = computeError(ee_pose, xd);
+    Eigen::VectorXd pose_err = Eigen::VectorXd::Zero(6);
+    pose_err = computeError(ee_pose, xd);
 
     // Compute the acceleration of the system
     Eigen::VectorXd ddx = ddx_des + M_des_.inverse() * (wrench + B_des_ * (dx_des - dx) + K_des_ * pose_err);
@@ -116,6 +118,13 @@ Eigen::VectorXd AdmittanceController::computeEESpeed(     Eigen::VectorXd &wrenc
     std::vector<double> ddx_tmp = std::vector<double>(ddx.data(), ddx.data() + ddx.size());
     ddx_filter_->filter(ddx_tmp);
     for (uint i = 0; i < 6; i++)    {ddx(i) = ddx_tmp[i];}
+
+    ROS_INFO("TX acc : %f", ddx(0));
+    ROS_INFO("TY acc : %f", ddx(1));
+    ROS_INFO("TZ acc : %f", ddx(2));
+    ROS_INFO("RX acc : %f", ddx(3));
+    ROS_INFO("RY acc : %f", ddx(4));
+    ROS_INFO("RZ acc : %f", ddx(5));
 
     // Increment the speed setpoint
     dx_res = dx + ddx * ts_;
@@ -239,7 +248,7 @@ void AdmittanceController::setFilterParams(const double &cutoff)
 // Method to compute the error between the real and desired poses
 Eigen::VectorXd AdmittanceController::computeError(const Eigen::VectorXd &preal, const Eigen::VectorXd &pdes)
 {
-    Eigen::VectorXd err;
+    Eigen::VectorXd err = Eigen::VectorXd::Zero(6);
 
     // Compute position error
     err(0) = pdes(0) - preal(0);

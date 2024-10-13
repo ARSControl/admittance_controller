@@ -7,9 +7,9 @@ admittance_control_node:
 
   m_d:              [2.5,   2.5,  2.5, 0.05, 0.05, 0.05]  # Diagonal mass    coefficients (kg)
 
-  k_d:              [25.0, 25.0, 25.0,  0.5,  0.5,  0.5]  # Diagonal spring  coefficients (N/m)
+  k_d:              [5.0,   5.0,  5.0,  0.5,  0.5,  0.5]  # Diagonal spring  coefficients (N/m)
 
-  b_d:              [5.0,   5.0,  5.0,  0.1,  0.1,  0.1]  # Diagonal damping coefficients (Ns/m)
+  b_d:              [1.0,   1.0,  1.0,  0.1,  0.1,  0.1]  # Diagonal damping coefficients (Ns/m)
 
   loop_rate:        500.0                                 # Hz
 
@@ -19,9 +19,9 @@ admittance_control_node:
 
   force_limit:      [30.0, 30.0, 30.0, 2.0, 2.0, 2.0]     # Force limits (Fx, Fy, Fz, Tx, Ty, Tz)
 
-  kp_pos:           1.0                                   # kp for position compensation
+  kp_pos:           0.0                                   # kp for position compensation
 
-  kp_rot:           1.0                                   # kp for rotation compensation
+  kp_rot:           0.0                                   # kp for rotation compensation
 
   joint_names:      ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]
 
@@ -30,7 +30,7 @@ admittance_control_node:
   command_topic:    "manipulator/cmd_vel"                 # vel command to the manipulator's ee, default
                                                           # "/ur_rtde/controllers/joint_velocity_controller/command"
 
-  force_topic:      "/ur_rtde/ft_sensor"                  # force sensor reading topic, default "/ur_rtde/ft_sensor"
+  force_feed_topic: "/ur_rtde/ft_sensor"                  # force sensor reading topic, default "/ur_rtde/ft_sensor"
 
   zero_ft_topic:    "/ur_rtde/zeroFTSensor"               # server to reset the force/torque sensor, default
                                                           # "/ur_rtde/zeroFTSensor"

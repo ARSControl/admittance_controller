@@ -30,10 +30,21 @@ double AdmittanceControl::mean = 0.0;  // variable for the control time average 
 // --------------------- PUBLIC CONSTRUCTOR ---------------------
 AdmittanceControl::AdmittanceControl(const std::string& node_name)
 {
+    // Initialize wrench to zero
+    wrench_      = Eigen::VectorXd::Zero(6);
+    force_limit_ = Eigen::VectorXd::Zero(6);
+
+    // Initialize state vectors
+    ee_pose_ = Eigen::VectorXd::Zero(7);    // 7 for position + quaternion
+    xd_      = Eigen::VectorXd::Zero(7);    // 7 for position + quaternion
+    dx_      = Eigen::VectorXd::Zero(6);    // 6 for linear and angular velocity
+    dx_des_  = Eigen::VectorXd::Zero(6);    // 6 for linear and angular velocity
+    ddx_des_ = Eigen::VectorXd::Zero(6);    // 6 for linear and angular velocity
+
     // Update node params
     node_name_ = node_name;
     check_params();
-    ROS_INFO("Params and attributes correctly initialized.");
+    ROS_INFO("Params and attributes for admittance controll are correctly initialized.");
 
     // Subscribe to topics
     joint_sub_ = nh_.subscribe("/joint_states",             1, &AdmittanceControl::jointCallback,       this);
@@ -58,16 +69,6 @@ AdmittanceControl::AdmittanceControl(const std::string& node_name)
 
     // Create service client to zero the force-torque sensor
     ft_client_ = nh_.serviceClient<std_srvs::Trigger>(zero_ft_sensor_topic_);
-
-    // Initialize wrench to zero
-    wrench_ = Eigen::VectorXd::Zero(6);
-
-    // Initialize state vectors
-    ee_pose_ = Eigen::VectorXd::Zero(7);    // 7 for position + quaternion
-    xd_      = Eigen::VectorXd::Zero(7);    // 7 for position + quaternion
-    dx_      = Eigen::VectorXd::Zero(6);    // 6 for linear and angular velocity
-    dx_des_  = Eigen::VectorXd::Zero(6);    // 6 for linear and angular velocity
-    ddx_des_ = Eigen::VectorXd::Zero(6);    // 6 for linear and angular velocity
 }
 
 // Node params update
@@ -130,19 +131,19 @@ void AdmittanceControl::check_params()
 
     for (uint i = 0; i < 6; i++)
     {
-        M_des_(i, i) = m_d[i];
-        K_des_(i, i) = k_d[i];
-        B_des_(i, i) = b_d[i];
+        M_des(i, i) = m_d[i];
+        K_des(i, i) = k_d[i];
+        B_des(i, i) = b_d[i];
     }
 
     // Init interaction params
-    std::vector<double> force_limit_vec = {0.,0.,0.,0.,0.,0.};
+    std::vector<double> force_limit_vec;
     if (!nh_.getParam(node_name_+"/force_limit", force_limit_vec))
     {
         ROS_WARN("Force limit not set, using default values.");
-        force_limit_vec = {10.,10.,10.,10.,10.,10.};
+        force_limit_vec = {1.0, 1.0, 1.0, 0.5, 0.5, 0.5,};
     }
-    for (unsigned int k = 0.; k < 6; k++) {force_limit_(k) = force_limit_vec[k];}
+    for (unsigned int k = 0; k < 6; k++) {force_limit_(k) = force_limit_vec[k];}
 
     if (!nh_.getParam(node_name_+"/mode", mode_))
     {
@@ -186,7 +187,7 @@ void AdmittanceControl::check_params()
         force_feed_topic_ = "/ur_rtde/ft_sensor";
     }
     // Zero force feed server
-    if (!nh_.getParam(node_name_+"/zero_ft_sensor_topic", zero_ft_sensor_topic_))
+    if (!nh_.getParam(node_name_+"/zero_ft_topic", zero_ft_sensor_topic_))
     {
         ROS_WARN("Zero force feedback server name param not set, using default: /ur_rtde/zeroFTSensor");
         zero_ft_sensor_topic_ = "/ur_rtde/zeroFTSensor";
@@ -209,6 +210,7 @@ void AdmittanceControl::check_params()
                                                n_joints_,  1/loop_rate_,
                                                dz_force_,  dz_torque_,
                                                kp_pos_,    kp_rot_);
+
 }
 
 // ---------------------------- UTILS --------------------------
@@ -452,7 +454,9 @@ void AdmittanceControl::admittance_control_main()
     else    // If "moveit" mode is enables
     {
         // Compute the speed of the robot according to the given wrench
-        Eigen::VectorXd dx = adm_controller_->computeEESpeed(wrench_,ee_pose_,xd_,dx_,dx_des_,ddx_des_);
+        Eigen::VectorXd dx = Eigen::VectorXd::Zero(6);
+
+        dx = adm_controller_->computeEESpeed(wrench_,ee_pose_,xd_,dx_,dx_des_,ddx_des_);
 
         // Convert the vel msg as ROS msg
         geometry_msgs::Twist ee_vel;
