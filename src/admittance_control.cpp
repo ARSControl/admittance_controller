@@ -33,6 +33,7 @@ AdmittanceControl::AdmittanceControl(const std::string& node_name)
     // Update node params
     node_name_ = node_name;
     check_params();
+    ROS_INFO("Params and attributes correctly initialized.");
 
     // Subscribe to topics
     joint_sub_ = nh_.subscribe("/joint_states",             1, &AdmittanceControl::jointCallback,       this);
@@ -49,7 +50,8 @@ AdmittanceControl::AdmittanceControl(const std::string& node_name)
         vel_pub_ = nh_.advertise<geometry_msgs::Twist>(command_topic_, 1);
     }
 
-    tcp_pose_sub_ = nh_.subscribe(ee_pose_topic_,1,&AdmittanceControl::tcpPoseCallback,this);
+    tcp_pose_sub_  = nh_.subscribe(ee_pose_topic_,1,&AdmittanceControl::tcpPoseCallback,this);
+    tcp_twist_sub_ = nh_.subscribe(ee_vel_topic_, 1,&AdmittanceControl::tcpTwistCallback,this);
 
     // Advertise service to enable admittance control
     adm_service_ = nh_.advertiseService(manipulator_name_+"/enable_admittance", &AdmittanceControl::enableAdmittance, this);
@@ -58,39 +60,42 @@ AdmittanceControl::AdmittanceControl(const std::string& node_name)
     ft_client_ = nh_.serviceClient<std_srvs::Trigger>(zero_ft_sensor_topic_);
 
     // Initialize wrench to zero
-    wrench_.setZero();
+    wrench_ = Eigen::VectorXd::Zero(6);
 
-    // Initialize desired pose, velocity and acceleration
-         xd_.setZero();
-     dx_des_.setZero();
-    ddx_des_.setZero();
+    // Initialize state vectors
+    ee_pose_ = Eigen::VectorXd::Zero(7);    // 7 for position + quaternion
+    xd_      = Eigen::VectorXd::Zero(7);    // 7 for position + quaternion
+    dx_      = Eigen::VectorXd::Zero(6);    // 6 for linear and angular velocity
+    dx_des_  = Eigen::VectorXd::Zero(6);    // 6 for linear and angular velocity
+    ddx_des_ = Eigen::VectorXd::Zero(6);    // 6 for linear and angular velocity
 }
 
 // Node params update
 void AdmittanceControl::check_params()
 {
     // Init joints
-    if (!nh_.getParam(node_name_+"joint_names", joint_names_))
+    if (!nh_.getParam(node_name_+"/joint_names", joint_names_))
     {
         ROS_WARN("Joint names not set, using default names.");
         joint_names_ = {"shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"}; // Default UR5 joints
     }
     n_joints_ = joint_names_.size();
+    q_ = Eigen::VectorXd::Zero(n_joints_);
 
     // Init motion params
     std::vector<double> m_d, k_d, b_d;
 
-    if (!nh_.getParam(node_name_+"m_d", m_d))
+    if (!nh_.getParam(node_name_+"/m_d", m_d))
     {
         ROS_WARN("Diagonal mass 'm_d' not set, using default value of 1.0.");
         m_d = {1.,1.,1.,1.,1.,1.};
     }
-    if (!nh_.getParam(node_name_+"k_d", k_d))
+    if (!nh_.getParam(node_name_+"/k_d", k_d))
     {
         ROS_WARN("Diagonal spring constant 'k_d' not set, using default value of 100.0.");
         k_d = {100.,100.,100.,100.,100.,100.};
     }
-    if (!nh_.getParam(node_name_+"b_d", b_d))
+    if (!nh_.getParam(node_name_+"/b_d", b_d))
     {
         ROS_WARN("Diagonal damping constant 'b_d' not set, using default value of 10.0.");
         b_d = {10.,10.,10.,10.,10.,10.};
@@ -186,11 +191,17 @@ void AdmittanceControl::check_params()
         ROS_WARN("Zero force feedback server name param not set, using default: /ur_rtde/zeroFTSensor");
         zero_ft_sensor_topic_ = "/ur_rtde/zeroFTSensor";
     }
-    // Init force feedback topic
+    // Init pose feedback topic
     if (!nh_.getParam(node_name_+"/ee_pose_topic", ee_pose_topic_))
     {
-        ROS_WARN("EE pose topic param not set, using default: /ur_rtde/ft_sensor.");
+        ROS_WARN("EE pose topic param not set, using default: /ur_rtde/cartesian_pose.");
         ee_pose_topic_ = "/ur_rtde/cartesian_pose";
+    }
+    // Init pose feedback topic
+    if (!nh_.getParam(node_name_+"/ee_vel_topic", ee_vel_topic_))
+    {
+        ROS_WARN("EE vel topic param not set, using default: /manipulator/tcp_vel.");
+        ee_vel_topic_ = "/manipulator/tcp_vel";
     }
 
     // Create an instance of AdmittanceController

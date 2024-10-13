@@ -83,13 +83,13 @@ private:
     // Node parameters
     std::string node_name_;
     ros::NodeHandle nh_;
-    ros::Subscriber joint_sub_, force_sub_, xd_sub_, tcp_pose_sub_;
+    ros::Subscriber joint_sub_, force_sub_, xd_sub_, tcp_pose_sub_, tcp_twist_sub_;
     ros::Publisher vel_pub_;
     ros::ServiceServer adm_service_;
     ros::ServiceClient ft_client_;
 
     // Topics and other parameters
-    std::string command_topic_, force_feed_topic_, zero_ft_sensor_topic_, ee_pose_topic_;
+    std::string command_topic_, force_feed_topic_, zero_ft_sensor_topic_, ee_pose_topic_, ee_vel_topic_;
 	std::string manipulator_name_, manipulator_;
     double loop_rate_;
     int n_joints_;
