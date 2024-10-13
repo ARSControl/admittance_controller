@@ -28,7 +28,7 @@
 double AdmittanceControl::mean = 0.0;  // variable for the control time average computation
 
 // --------------------- PUBLIC CONSTRUCTOR ---------------------
-AdmittanceControl::AdmittanceControl(std::string node_name)
+AdmittanceControl::AdmittanceControl(const std::string& node_name)
 {
     // Update node params
     node_name_ = node_name;
@@ -40,13 +40,13 @@ AdmittanceControl::AdmittanceControl(std::string node_name)
     xd_sub_    = nh_.subscribe(manipulator_name_+"/adm_xd", 1, &AdmittanceControl::admittanceXdCallback, this);
 
     // Load and apply parameters
-    if (mode == "kdl")
+    if (mode_ == "kdl")
     {
-        vel_pub_ = nh.advertise<std_msgs::Float64MultiArray>(command_topic_, 1);
+        vel_pub_ = nh_.advertise<std_msgs::Float64MultiArray>(command_topic_, 1);
     }
     else
     {
-        vel_pub_ = nh.advertise<geometry_msgs::Twist>(command_topic_, 1);
+        vel_pub_ = nh_.advertise<geometry_msgs::Twist>(command_topic_, 1);
     }
 
     tcp_pose_sub_ = nh_.subscribe(ee_pose_topic_,1,&AdmittanceControl::tcpPoseCallback,this);
@@ -59,13 +59,18 @@ AdmittanceControl::AdmittanceControl(std::string node_name)
 
     // Initialize wrench to zero
     wrench_.setZero();
+
+    // Initialize desired pose, velocity and acceleration
+         xd_.setZero();
+     dx_des_.setZero();
+    ddx_des_.setZero();
 }
 
 // Node params update
-void AdmittanceControl::check_param()
+void AdmittanceControl::check_params()
 {
     // Init joints
-    if (!nh.getParam(node_name_+"joint_names", joint_names_))
+    if (!nh_.getParam(node_name_+"joint_names", joint_names_))
     {
         ROS_WARN("Joint names not set, using default names.");
         joint_names_ = {"shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"}; // Default UR5 joints
@@ -75,26 +80,48 @@ void AdmittanceControl::check_param()
     // Init motion params
     std::vector<double> m_d, k_d, b_d;
 
-    if (!nh.getParam(node_name_+"m_d", m_d))
+    if (!nh_.getParam(node_name_+"m_d", m_d))
     {
         ROS_WARN("Diagonal mass 'm_d' not set, using default value of 1.0.");
-        m_d = Eigen::VectorXd::Constant(n_joints_, 1.0);
+        m_d = {1.,1.,1.,1.,1.,1.};
     }
-    if (!nh.getParam(node_name_+"k_d", k_d))
+    if (!nh_.getParam(node_name_+"k_d", k_d))
     {
         ROS_WARN("Diagonal spring constant 'k_d' not set, using default value of 100.0.");
-        k_d = Eigen::VectorXd::Constant(n_joints_, 100.0);
+        k_d = {100.,100.,100.,100.,100.,100.};
     }
-    if (!nh.getParam(node_name_+"b_d", b_d))
+    if (!nh_.getParam(node_name_+"b_d", b_d))
     {
         ROS_WARN("Diagonal damping constant 'b_d' not set, using default value of 10.0.");
-        b_d = Eigen::VectorXd::Constant(n_joints_, 10.0);
+        b_d = {10.,10.,10.,10.,10.,10.};
+    }
+
+    // Admittance params
+    if (!nh_.getParam(node_name_+"/dz_force", dz_force_))
+    {
+        ROS_WARN("Force dead zone not set, using default: 5 N.");
+        dz_force_ = 5.0;
+    }
+    if (!nh_.getParam(node_name_+"/dz_torque", dz_torque_))
+    {
+        ROS_WARN("Torque dead zone not set, using default: 1 N.");
+        dz_torque_ = 1.0;
+    }
+    if (!nh_.getParam(node_name_+"/kp_pos", kp_pos_))
+    {
+        ROS_WARN("Proportional gain for position compensation not set, using default: 1.0.");
+        kp_pos_ = 1.0;
+    }
+    if (!nh_.getParam(node_name_+"/kp_rot", kp_rot_))
+    {
+        ROS_WARN("Proportional gain for rotation compensation not set, using default: 1.0.");
+        kp_rot_ = 1.0;
     }
 
     // Fill matrices values
-    Eigen::MatrixXd<double,6,6> M_des = Eigen::MatrixXd::Zero(6,6);
-    Eigen::MatrixXd<double,6,6> K_des = Eigen::MatrixXd::Zero(6,6);
-    Eigen::MatrixXd<double,6,6> B_des = Eigen::MatrixXd::Zero(6,6);
+    Eigen::Matrix<double, 6, 6> M_des = Eigen::Matrix<double, 6, 6>::Zero();
+    Eigen::Matrix<double, 6, 6> K_des = Eigen::Matrix<double, 6, 6>::Zero();
+    Eigen::Matrix<double, 6, 6> B_des = Eigen::Matrix<double, 6, 6>::Zero();
 
     for (uint i = 0; i < 6; i++)
     {
@@ -103,127 +130,140 @@ void AdmittanceControl::check_param()
         B_des_(i, i) = b_d[i];
     }
 
-    // Create an instance of AdmittanceController
-    adm_controller_ = new AdmittanceController( Mdes, Kdes, Bdes, 1/ros_loop_);
-
     // Init interaction params
-    if (!nh.getParam(node_name_+"/force_limit", force_limit_))
+    std::vector<double> force_limit_vec = {0.,0.,0.,0.,0.,0.};
+    if (!nh_.getParam(node_name_+"/force_limit", force_limit_vec))
     {
         ROS_WARN("Force limit not set, using default values.");
-        force_limit_ = Eigen::VectorXd::Constant(6, 10.0);
+        force_limit_vec = {10.,10.,10.,10.,10.,10.};
     }
-    if (!nh.getParam(node_name_+"/mode", mode_))
+    for (unsigned int k = 0.; k < 6; k++) {force_limit_(k) = force_limit_vec[k];}
+
+    if (!nh_.getParam(node_name_+"/mode", mode_))
     {
         ROS_WARN("Mode param not set, using default: kdl.");
         mode_ = "kdl";
     }
-    if (mode_ == "kdl") {mode_bool_ = false; robot_kdl_ = new ManipulatorKDL(manipulator_);}
+    if (mode_ == "kdl") {mode_bool_ = false;}
     else                {mode_bool_ =  true;}
 
     // Init control params
-    if (!nh.getParam(node_name_+"/loop_rate", loop_rate_))
+    if (!nh_.getParam(node_name_+"/loop_rate", loop_rate_))
     {
         ROS_WARN("Loop rate not set, using default: 500 Hz.");
         loop_rate_ = 500.0; // Default 500 Hz
     }
 
     // Init model params
-    if (!nh.getParam(node_name_+"/manipulator", manipulator_))
+    if (!nh_.getParam(node_name_+"/manipulator", manipulator_))
     {
         ROS_WARN("Manipulator name not set, using default: ur5.");
         manipulator_name_ = "ur5";
     }
+    robot_kdl_ = new ManipulatorKDL(manipulator_);
 
-    if (!nh.getParam(node_name_+"/manipulator_name", manipulator_name_))
+    if (!nh_.getParam(node_name_+"/manipulator_name", manipulator_name_))
     {
         ROS_WARN("Manipulator name not set, using default: manipulator.");
         manipulator_name_ = "manipulator";
     }
 
     // Init command topic
-    if (!nh.getParam(node_name_+"/command_topic", command_topic_))
+    if (!nh_.getParam(node_name_+"/command_topic", command_topic_))
     {
         ROS_WARN("Command topic param not set, using default: /ur_rtde/controllers/joint_velocity_controller/command.");
         command_topic_ = "/ur_rtde/controllers/joint_velocity_controller/command";
     }
     // Init force feedback topic
-    if (!nh.getParam(node_name_+"/force_feed_topic", force_feed_topic_))
+    if (!nh_.getParam(node_name_+"/force_feed_topic", force_feed_topic_))
     {
         ROS_WARN("Force feedback topic param not set, using default: /ur_rtde/ft_sensor.");
         force_feed_topic_ = "/ur_rtde/ft_sensor";
     }
     // Zero force feed server
-    if (!nh.getParam(node_name_+"/zero_ft_sensor_topic", zero_ft_sensor_topic_))
+    if (!nh_.getParam(node_name_+"/zero_ft_sensor_topic", zero_ft_sensor_topic_))
     {
         ROS_WARN("Zero force feedback server name param not set, using default: /ur_rtde/zeroFTSensor");
         zero_ft_sensor_topic_ = "/ur_rtde/zeroFTSensor";
     }
     // Init force feedback topic
-    if (!nh.getParam(node_name_+"/ee_pose_topic", ee_pose_topic_))
+    if (!nh_.getParam(node_name_+"/ee_pose_topic", ee_pose_topic_))
     {
         ROS_WARN("EE pose topic param not set, using default: /ur_rtde/ft_sensor.");
         ee_pose_topic_ = "/ur_rtde/cartesian_pose";
     }
+
+    // Create an instance of AdmittanceController
+    adm_controller_ = new AdmittanceController(M_des, K_des, B_des,
+                                               n_joints_,  1/loop_rate_,
+                                               dz_force_,  dz_torque_,
+                                               kp_pos_,    kp_rot_);
 }
 
 // ---------------------------- UTILS --------------------------
 
 // --------------------- QUATERNIONS HANDLER -------------------
-// Conversion from degrees euler angles to quaternion
-geometry_msgs::Quaternion ManipulatorMenu::quaternion_from_euler(double roll, double pitch, double yaw)
+// Conversion from radians euler angles to quaternion
+Eigen::Quaterniond AdmittanceControl::quaternion_from_euler(const double& roll, const double& pitch, const double& yaw)
 {
-  // Declaration of empty quaternion
-  geometry_msgs::Quaternion quaternion;
+    // Create the rotation matrix from Euler angles
+    Eigen::AngleAxisd  rollAngle(roll,  Eigen::Vector3d::UnitX());
+    Eigen::AngleAxisd pitchAngle(pitch, Eigen::Vector3d::UnitY());
+    Eigen::AngleAxisd   yawAngle(yaw,   Eigen::Vector3d::UnitZ());
 
-  // Conversion from euler rotation to pose quaternion
-  tf2::Quaternion quat; quat.setRPY(roll*M_PI/180,pitch*M_PI/180,yaw*M_PI/180); quat.normalize();
-  quaternion.x = quat.getX();
-  quaternion.y = quat.getY();
-  quaternion.z = quat.getZ();
-  quaternion.w = quat.getW();
+    // Combine the rotations into a single quaternion
+    Eigen::Quaterniond quaternion = yawAngle * pitchAngle * rollAngle;
 
-  return quaternion;
-}
-// Conversion from quaternion to degrees euler angles
-std::vector<double> ManipulatorMenu::euler_from_quaternion(const geometry_msgs::Quaternion quaternion)
-{
-  tf2::Quaternion tf_quaternion;
-  tf2::fromMsg(quaternion, tf_quaternion);
+    // Normalize the quaternion (Eigen quaternions are not automatically normalized)
+    quaternion.normalize();
 
-  // Get Euler angles
-  double roll, pitch, yaw;
-  tf2::Matrix3x3(tf_quaternion).getRPY(roll, pitch, yaw);
-
-  // Store the angles in a vector
-  std::vector<double> euler_angles = {roll*180.0/M_PI,pitch*180.0/M_PI,yaw*180.0/M_PI};
-
-  // Check if angles are in the interval (-180,180]
-  for (unsigned int k = 0; k < 3; k++)
-  {
-    if      (euler_angles[k] < -179.9999999999) {euler_angles[k] += 360.;}
-    else if (euler_angles[k] > +180.          ) {euler_angles[k] -= 360.;}
-  }
-
-  return euler_angles; 
+    return quaternion;
 }
 
-// --------------------------- POSITION CALLBACKS -------------------------------
-
-// Robot state callback
-void AdmittanceControl::tcpPoseCallback(const geometry_msgs::Pose& msg)
+// Conversion from quaternion to radians euler angles
+Eigen::Vector3d AdmittanceControl::euler_from_quaternion(const Eigen::Quaterniond& quaternion)
 {
-    ee_pose_(0) = msg->pose.position.x;
-    ee_pose_(1) = msg->pose.position.y;
-    ee_pose_(2) = msg->pose.position.z;
-    std::vector<double> ee_pose_rpy = euler_from_quaternion(msg->pose.orientation);
-    ee_pose_(3) = ee_pose_rpy[0];
-    ee_pose_(4) = ee_pose_rpy[1];
-    ee_pose_(5) = ee_pose_rpy[2];
+    // Convert the quaternion to a rotation matrix
+    Eigen::Matrix3d rotationMatrix = quaternion.toRotationMatrix();
 
-    // if (mode_bool_ == false) // If manipulator_kdl has been chosen as planning interface
-    // {
-    //     robot_kdl->fk(q_, ee_pose_);
-    // }
+    // Extract the Euler angles (roll, pitch, yaw) from the rotation matrix
+    Eigen::Vector3d euler_angles_rad = rotationMatrix.eulerAngles(2, 1, 0);  // ZYX order (yaw, pitch, roll)
+
+    // Convert the angles from radians to degrees
+    Eigen::Vector3d euler_angles;
+    euler_angles[0] = euler_angles_rad[2];  // Roll
+    euler_angles[1] = euler_angles_rad[1];  // Pitch
+    euler_angles[2] = euler_angles_rad[0];  // Yaw
+
+    // Check if angles are in the interval (-180,180]
+    for (unsigned int k = 0; k < 3; k++)
+    {
+        if      (euler_angles[k] < -M_PI) { euler_angles[k] += 2*M_PI; }
+        else if (euler_angles[k] > +M_PI) { euler_angles[k] -= 2*M_PI; }
+    }
+
+    return euler_angles;
+}
+
+// --------------------------- ROBOT STATE CALLBACKS -------------------------------
+
+// Robot tcp pose callback
+void AdmittanceControl::tcpPoseCallback(const geometry_msgs::Pose::ConstPtr& msg)
+{
+    ee_pose_(0) = msg->position.x;
+    ee_pose_(1) = msg->position.y;
+    ee_pose_(2) = msg->position.z;
+    // Eigen::Vector3d ee_pose_rpy = euler_from_quaternion(msg->pose.orientation);
+    // ee_pose_(3) = ee_pose_rpy(0);
+    // ee_pose_(4) = ee_pose_rpy(1);
+    // ee_pose_(5) = ee_pose_rpy(2);
+    ee_pose_(3) = msg->orientation.x;
+    ee_pose_(4) = msg->orientation.y;
+    ee_pose_(5) = msg->orientation.z;
+    ee_pose_(6) = msg->orientation.w;
+
+    // If manipulator_kdl has been chosen as planning interface
+    // if (mode_bool_ == false) {robot_kdl->fk(q_, ee_pose_);}
 }
 
 // Joint state callback
@@ -237,34 +277,48 @@ void AdmittanceControl::jointCallback(const sensor_msgs::JointState::ConstPtr& m
     q_(5) = msg->position[5];
 }
 
+// Robot twist callback
+void AdmittanceControl::tcpTwistCallback(const geometry_msgs::Twist::ConstPtr& msg)
+{
+    dx_(0) = msg->linear.x;
+    dx_(1) = msg->linear.y;
+    dx_(2) = msg->linear.z;
+    dx_(3) = msg->angular.x;
+    dx_(4) = msg->angular.y;
+    dx_(5) = msg->angular.z;
+
+    // If manipulator_kdl has been chosen as planning interface
+    // if (mode_bool_ == false) {robot_kdl->fk(q_, ee_pose_);}
+}
+
 // --------------------------- JACOBIAN COMPUTATIONS -----------------------------------
+// Get Jacobian -> only in mode "kdl"
 Eigen::MatrixXd AdmittanceControl::getJacobian()
 {
-    Eigen::MatrixXd<double,6,n_joints_> jacobian_eigen;
-    // If manipulator_kdl has been chosen as planning interface
-    if (mode_bool_ == false)
-    {
-        std::vector<double,double> jacobian;
-        robot_kdl->jac(q_, jacobian);
+    Eigen::MatrixXd jacobian_eigen(6, n_joints_);
+    std::vector<std::vector<double>> jacobian(6, std::vector<double>(n_joints_));
+    std::vector<double> q = {q_(0),q_(1),q_(2),q_(3),q_(4),q_(5)};
 
-        for (uint i = 0; i < 6; i++)
+    robot_kdl_->jac(q, jacobian);
+
+    for (uint i = 0; i < 6; i++)
+    {
+        for (uint j = 0; j < n_joints_; j++)
         {
-            for (uint j = 0; j < n_joints_; j++)
-            {
-                jacobian_eigen(i, j) = jacobian[i][j];
-            }
+            jacobian_eigen(i, j) = jacobian[i][j];
         }
     }
-    // else anything needed
+
     return jacobian_eigen;
 }
 
+// Get Inverse Jacobian -> only in mode "kdl"
 Eigen::MatrixXd AdmittanceControl::getInvJacobian()
 {
     return getJacobian().completeOrthogonalDecomposition().pseudoInverse();
 }
 
-// SENSORS 
+// ---------------------------------- SENSORS -------------------------------- 
 
 // Callback function for force sensor data
 void AdmittanceControl::forceSensorCallback(const geometry_msgs::Wrench::ConstPtr &w)
@@ -284,7 +338,14 @@ void AdmittanceControl::admittanceXdCallback(const geometry_msgs::Pose::ConstPtr
     xd_(0) = p->position.x;
     xd_(1) = p->position.y;
     xd_(2) = p->position.z;
-    std::vector<double> x_rpy = 
+    // Eigen::Vector3d x_rpy = euler_from_quaternion(msg->pose.orientation);
+    // xd_(3) = x_rpy(0);
+    // xd_(4) = x_rpy(1);
+    // xd_(5) = x_rpy(2);
+    xd_(3) = p->orientation.x;
+    xd_(4) = p->orientation.y;
+    xd_(5) = p->orientation.z;
+    xd_(6) = p->orientation.w; 
 }
 
 // ----------------------------- ADMITTANCE ENABLER -----------------------------
@@ -295,11 +356,15 @@ bool AdmittanceControl::enableAdmittance(std_srvs::SetBool::Request  &req,
 {
     if (req.data)
     {
-        // Enable admittance control and zero the force-torque sensor
+        // Enable admittance control
         adm_controller_->enableAdmittance();
+
+        // Set the desired pose equal to the current pose
+        xd_ = ee_pose_;
+
+        // Trigger the service to zero the force-torque sensor
         std_srvs::Trigger srv;
         ft_client_.call(srv);
-        ros::spinOnce();
     }
     else
     {
@@ -311,6 +376,7 @@ bool AdmittanceControl::enableAdmittance(std_srvs::SetBool::Request  &req,
 }
 
 // ----------------------------- MAIN FUNCTIONS -----------------------------
+
 // Shutdown handler
 void AdmittanceControl::shutdown_handler(int sig)
 {
@@ -353,17 +419,17 @@ void AdmittanceControl::spinner()
         mean = 1/(static_cast<double>(k))*(sample_k+mean*static_cast<double>(k-1));
 
         // Wait for the next iteration
-		r.sleep();
+		rate.sleep();
 	}
 }
 
 // Main control loop function
 void AdmittanceControl::admittance_control_main()
 {
-    if (mode_ == "kdl")
+    if (mode_bool_ == false)    // If "kdl" mode is enables
     {
         // Compute the speed of the robot according to the given wrench
-        Eigen::VectorXd::Zero(n_joints_) dq = adm_controller_->computeSpeed(wrench_);
+        Eigen::VectorXd dq = adm_controller_->computeQSpeed(wrench_,ee_pose_,xd_,dx_,dx_des_,ddx_des_,getJacobian());
 
         // Convert the vel msg as ROS msg
         std_msgs::Float64MultiArray joint_vel;
@@ -372,10 +438,10 @@ void AdmittanceControl::admittance_control_main()
         // Send the command to the robot
         vel_pub_.publish(joint_vel);
     }
-    else
+    else    // If "moveit" mode is enables
     {
         // Compute the speed of the robot according to the given wrench
-        Eigen::VectorXd::Zero(n_joints_) dx = adm_controller_->computeEESpeed(wrench_);
+        Eigen::VectorXd dx = adm_controller_->computeEESpeed(wrench_,ee_pose_,xd_,dx_,dx_des_,ddx_des_);
 
         // Convert the vel msg as ROS msg
         geometry_msgs::Twist ee_vel;
