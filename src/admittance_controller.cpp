@@ -119,13 +119,6 @@ Eigen::VectorXd AdmittanceController::computeEESpeed(     Eigen::VectorXd &wrenc
     ddx_filter_->filter(ddx_tmp);
     for (uint i = 0; i < 6; i++)    {ddx(i) = ddx_tmp[i];}
 
-    ROS_INFO("TX acc : %f", ddx(0));
-    ROS_INFO("TY acc : %f", ddx(1));
-    ROS_INFO("TZ acc : %f", ddx(2));
-    ROS_INFO("RX acc : %f", ddx(3));
-    ROS_INFO("RY acc : %f", ddx(4));
-    ROS_INFO("RZ acc : %f", ddx(5));
-
     // Increment the speed setpoint
     dx_res = dx + ddx * ts_;
 

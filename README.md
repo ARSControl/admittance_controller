@@ -28,6 +28,10 @@ Extract the folder "orocos_kdl" from "orocos_kinematics_dynamics" and delete the
 
     git clone git@github.com:ARSControl/admittance_controller.git
 
+To interface the repo with the manipulator planner, copy the following command to the terminal and follow its installation instructions:
+
+    git clone git@github.com:Italo-99/manipulators.git
+
 Compile the repo:
 
     cd your_catkin_ws
@@ -39,7 +43,19 @@ Alternatively, you can compile using the command
 
 ## How to use
 
-TODO
+Use the file "admittance_control_params.yaml" to setup the configuration of your robot. The meaning of each param is accurately described in this config file.
+
+The main executable node is "admittance_control_node". To automatically launch it, with your custom configuration, run the following command on the terminal:
+
+    roslaunch admittance_controller admittance_control.launch
+
+If you want to interface the robot with the library "manipulator_kdl", launch the command (as ur5e example):
+
+    roslaunch manipulator_kdl manipulator_kdl.launch robot_name:=ur5
+
+If you want to interface the robot with MoveIt!, launch the command (as ur5e example):
+
+    roslaunch manipulators ur5e_planner.launch
 
 ### Optimized compiler
 
