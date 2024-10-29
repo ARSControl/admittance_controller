@@ -114,9 +114,17 @@ Eigen::VectorXd AdmittanceController::computeEESpeed(     Eigen::VectorXd &wrenc
     // Compute the acceleration of the system
     Eigen::VectorXd ddx = ddx_des + M_des_.inverse() * (wrench + B_des_ * (dx_des - dx) + K_des_ * pose_err);
 
+    if (ddx(0)!=ddx(0)) {
+        ROS_INFO("Acc none"); 
+        ros::Duration(10.0).sleep();
+    }
+
     // Apply the low-pass filter to the acceleration 
     std::vector<double> ddx_tmp = std::vector<double>(ddx.data(), ddx.data() + ddx.size());
     ddx_filter_->filter(ddx_tmp);
+
+    // if (ddx_filter_(0)!=ddx_filter_(0)) {ROS_INFO("Acc filter none"); ros::Duration(5.0).sleep();}
+
     for (uint i = 0; i < 6; i++)    {ddx(i) = ddx_tmp[i];}
 
     // Increment the speed setpoint
@@ -255,10 +263,16 @@ Eigen::VectorXd AdmittanceController::computeError(const Eigen::VectorXd &preal,
 
     if (qact.dot(qdes) < 0) {qdes.coeffs() = -qdes.coeffs();}
 
-    double theta = std::acos(qact.dot(qdes));
+    float theta = std::acos(qact.dot(qdes));
+
+    if (theta != theta)
+    {
+        theta = 0.0;
+        std::cout << "Theta correction: " << theta << std::endl;
+    }        
 
     Eigen::Quaterniond dq;
-    if (theta == 0)
+    if (theta == 0.0)
     {
         dq = Eigen::Quaterniond(0.0, 0.0, 0.0, 0.0);
     }

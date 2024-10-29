@@ -288,17 +288,22 @@ void AdmittanceControl::jointCallback(const sensor_msgs::JointState::ConstPtr& m
     q_(3) = msg->position[3];
     q_(4) = msg->position[4];
     q_(5) = msg->position[5];
+
+    if (!mode_bool_)
+    {
+        dx_ = getJacobian()*q_;
+    }
 }
 
 // Robot twist callback
 void AdmittanceControl::tcpTwistCallback(const geometry_msgs::Twist::ConstPtr& msg)
 {
-    dx_(0) = msg->linear.x;
-    dx_(1) = msg->linear.y;
-    dx_(2) = msg->linear.z;
-    dx_(3) = msg->angular.x;
-    dx_(4) = msg->angular.y;
-    dx_(5) = msg->angular.z;
+    // dx_(0) = msg->linear.x;
+    // dx_(1) = msg->linear.y;
+    // dx_(2) = msg->linear.z;
+    // dx_(3) = msg->angular.x;
+    // dx_(4) = msg->angular.y;
+    // dx_(5) = msg->angular.z;
 
     // If manipulator_kdl has been chosen as planning interface
     // if (mode_bool_ == false) {robot_kdl->fk(q_, ee_pose_);}
@@ -457,6 +462,7 @@ void AdmittanceControl::admittance_control_main()
         Eigen::VectorXd dx = Eigen::VectorXd::Zero(6);
 
         dx = adm_controller_->computeEESpeed(wrench_,ee_pose_,xd_,dx_,dx_des_,ddx_des_);
+        dx_ = dx;
 
         // Convert the vel msg as ROS msg
         geometry_msgs::Twist ee_vel;
