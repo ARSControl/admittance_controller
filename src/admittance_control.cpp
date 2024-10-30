@@ -276,7 +276,7 @@ void AdmittanceControl::tcpPoseCallback(const geometry_msgs::Pose::ConstPtr& msg
     ee_pose_(6) = msg->orientation.w;
 
     // If manipulator_kdl has been chosen as planning interface
-    // if (mode_bool_ == false) {robot_kdl->fk(q_, ee_pose_);}
+    // if (mode_bool_ == false) {robot_kdl_->fk(q_, ee_pose_);}
 }
 
 // Joint state callback
@@ -289,10 +289,10 @@ void AdmittanceControl::jointCallback(const sensor_msgs::JointState::ConstPtr& m
     q_(4) = msg->position[4];
     q_(5) = msg->position[5];
 
-    if (!mode_bool_)
-    {
-        dx_ = getJacobian()*q_;
-    }
+    // if (!mode_bool_)
+    // {
+    //     dx_ = getJacobian()*q_;
+    // }
 }
 
 // Robot twist callback
@@ -304,9 +304,6 @@ void AdmittanceControl::tcpTwistCallback(const geometry_msgs::Twist::ConstPtr& m
     // dx_(3) = msg->angular.x;
     // dx_(4) = msg->angular.y;
     // dx_(5) = msg->angular.z;
-
-    // If manipulator_kdl has been chosen as planning interface
-    // if (mode_bool_ == false) {robot_kdl->fk(q_, ee_pose_);}
 }
 
 // --------------------------- JACOBIAN COMPUTATIONS -----------------------------------
@@ -461,7 +458,10 @@ void AdmittanceControl::admittance_control_main()
         // Compute the speed of the robot according to the given wrench
         Eigen::VectorXd dx = Eigen::VectorXd::Zero(6);
 
+        // Compute robot speed as impedance control output
         dx = adm_controller_->computeEESpeed(wrench_,ee_pose_,xd_,dx_,dx_des_,ddx_des_);
+
+        // Update ee measued speed as admittance output (TODO: add a filter to vel measure)
         dx_ = dx;
 
         // Convert the vel msg as ROS msg
