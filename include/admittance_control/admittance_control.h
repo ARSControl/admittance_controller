@@ -74,7 +74,15 @@ private:
 	// Utils
 	Eigen::Quaterniond quaternion_from_euler(const double& roll, const double& pitch, const double& yaw);
 	Eigen::Vector3d euler_from_quaternion(const Eigen::Quaterniond& quaternion);
-    
+
+    // Variable admittance
+    void changeMassAdmittanceCallback(      const geometry_msgs::Vector3::ConstPtr& new_params);
+    void changeDampAdmittanceCallback(      const geometry_msgs::Vector3::ConstPtr& new_params);
+    void changeStiffAdmittanceCallback(     const geometry_msgs::Vector3::ConstPtr& new_params);
+    void changeMassRotAdmittanceCallback(   const geometry_msgs::Vector3::ConstPtr& new_params);
+    void changeDampRotAdmittanceCallback(   const geometry_msgs::Vector3::ConstPtr& new_params);
+    void changeStiffRotAdmittanceCallback(  const geometry_msgs::Vector3::ConstPtr& new_params);
+
 	// ------------------------------ VARIABLES ----------------------------
 
 	// Static variables
@@ -97,6 +105,15 @@ private:
     
     // Controller instance
     AdmittanceController* adm_controller_;
+    Eigen::Matrix<double, 6, 6> M_des_;
+    Eigen::Matrix<double, 6, 6> K_des_;
+    Eigen::Matrix<double, 6, 6> B_des_;
+    ros::Subscriber m_adm_pos_sub_;
+    ros::Subscriber b_adm_pos_sub_;
+    ros::Subscriber k_adm_pos_sub_;
+    ros::Subscriber m_adm_rot_sub_;
+    ros::Subscriber b_adm_rot_sub_;
+    ros::Subscriber k_adm_rot_sub_;
     
     // KDL instance (for mode "kdl")
     ManipulatorKDL* robot_kdl_;
@@ -110,7 +127,6 @@ private:
 	// Mode selection flag
     bool mode_bool_;
     std::string mode_;
-    
 };
 
 #endif // ADMITTANCE_CONTROL_H

@@ -52,7 +52,7 @@ AdmittanceController::AdmittanceController(const Eigen::Matrix<double, 6, 6> &Md
     setDeadZone(dz_force,dz_torque);
 }
 
-// ----------------------------- ADMITTANCE 
+// ----------------------------- ADMITTANCE  ----------------------------------- //
 
 // Method to compute joints velocities for kdl mode
 Eigen::VectorXd AdmittanceController::computeQSpeed(      Eigen::VectorXd &wrench,

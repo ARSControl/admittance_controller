@@ -50,7 +50,14 @@ AdmittanceControl::AdmittanceControl(const std::string& node_name)
     joint_sub_ = nh_.subscribe("/joint_states",             1, &AdmittanceControl::jointCallback,       this);
     force_sub_ = nh_.subscribe(force_feed_topic_,           1, &AdmittanceControl::forceSensorCallback, this);
     xd_sub_    = nh_.subscribe(manipulator_name_+"/adm_xd", 1, &AdmittanceControl::admittanceXdCallback, this);
-
+    
+    // Subscribers to change admittance
+    m_adm_pos_sub_ = nh_.subscribe(manipulator_name_+"/m_adm_pos", 1, &AdmittanceControl::changeMassAdmittanceCallback, this);
+    b_adm_pos_sub_ = nh_.subscribe(manipulator_name_+"/b_adm_pos", 1, &AdmittanceControl::changeDampAdmittanceCallback, this);
+    k_adm_pos_sub_ = nh_.subscribe(manipulator_name_+"/k_adm_pos", 1, &AdmittanceControl::changeStiffAdmittanceCallback, this);
+    m_adm_rot_sub_ = nh_.subscribe(manipulator_name_+"/m_adm_rot", 1, &AdmittanceControl::changeMassRotAdmittanceCallback, this);
+    b_adm_rot_sub_ = nh_.subscribe(manipulator_name_+"/b_adm_rot", 1, &AdmittanceControl::changeDampRotAdmittanceCallback, this);
+    k_adm_rot_sub_ = nh_.subscribe(manipulator_name_+"/k_adm_rot", 1, &AdmittanceControl::changeStiffRotAdmittanceCallback, this);
     // Load and apply parameters
     if (mode_ == "kdl")
     {
@@ -125,15 +132,15 @@ void AdmittanceControl::check_params()
     }
 
     // Fill matrices values
-    Eigen::Matrix<double, 6, 6> M_des = Eigen::Matrix<double, 6, 6>::Zero();
-    Eigen::Matrix<double, 6, 6> K_des = Eigen::Matrix<double, 6, 6>::Zero();
-    Eigen::Matrix<double, 6, 6> B_des = Eigen::Matrix<double, 6, 6>::Zero();
+    M_des_ = Eigen::Matrix<double, 6, 6>::Zero();
+    K_des_ = Eigen::Matrix<double, 6, 6>::Zero();
+    B_des_ = Eigen::Matrix<double, 6, 6>::Zero();
 
     for (uint i = 0; i < 6; i++)
     {
-        M_des(i, i) = m_d[i];
-        K_des(i, i) = k_d[i];
-        B_des(i, i) = b_d[i];
+        M_des_(i, i) = m_d[i];
+        K_des_(i, i) = k_d[i];
+        B_des_(i, i) = b_d[i];
     }
 
     // Init interaction params
@@ -206,7 +213,7 @@ void AdmittanceControl::check_params()
     }
 
     // Create an instance of AdmittanceController
-    adm_controller_ = new AdmittanceController(M_des, K_des, B_des,
+    adm_controller_ = new AdmittanceController(M_des_, K_des_, B_des_,
                                                n_joints_,  1/loop_rate_,
                                                dz_force_,  dz_torque_,
                                                kp_pos_,    kp_rot_);
@@ -214,6 +221,50 @@ void AdmittanceControl::check_params()
 }
 
 // ---------------------------- UTILS --------------------------
+
+
+// ----------------------------- VARIABLE ADMITTANCE --------------------------- //
+void AdmittanceControl::changeMassAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
+{
+    M_des_(0,0) = new_params->x;
+    M_des_(1,1) = new_params->y;
+    M_des_(2,2) = new_params->z;
+}
+
+void AdmittanceControl::changeDampAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
+{
+    B_des_(0,0) = new_params->x;
+    B_des_(1,1) = new_params->y;
+    B_des_(2,2) = new_params->z;
+}
+
+void AdmittanceControl::changeStiffAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
+{
+    K_des_(0,0) = new_params->x;
+    K_des_(1,1) = new_params->y;
+    K_des_(2,2) = new_params->z;
+}
+
+void AdmittanceControl::changeMassRotAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
+{
+    M_des_(3,3) = new_params->x;
+    M_des_(4,4) = new_params->y;
+    M_des_(5,5) = new_params->z;
+}
+
+void AdmittanceControl::changeDampRotAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
+{
+    B_des_(3,3) = new_params->x;
+    B_des_(4,4) = new_params->y;
+    B_des_(5,5) = new_params->z;
+}
+
+void AdmittanceControl::changeStiffRotAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
+{
+    K_des_(3,3) = new_params->x;
+    K_des_(4,4) = new_params->y;
+    K_des_(5,5) = new_params->z;
+}
 
 // --------------------- QUATERNIONS HANDLER -------------------
 // Conversion from radians euler angles to quaternion

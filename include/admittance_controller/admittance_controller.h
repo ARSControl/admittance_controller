@@ -28,6 +28,7 @@
 #include <Eigen/Dense>
 #include <vector>
 #include "filters/RCFilter.h"
+#include "geometry_msgs/Vector3.h"
 
 class AdmittanceController
 {
