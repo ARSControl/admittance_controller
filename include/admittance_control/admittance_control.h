@@ -105,9 +105,6 @@ private:
     
     // Controller instance
     AdmittanceController* adm_controller_;
-    Eigen::Matrix<double, 6, 6> M_des_;
-    Eigen::Matrix<double, 6, 6> K_des_;
-    Eigen::Matrix<double, 6, 6> B_des_;
     ros::Subscriber m_adm_pos_sub_;
     ros::Subscriber b_adm_pos_sub_;
     ros::Subscriber k_adm_pos_sub_;
@@ -120,7 +117,6 @@ private:
     
     // Matrices and vectors for control
     Eigen::VectorXd q_, xd_, dx_, dx_des_, ddx_des_, wrench_, ee_pose_;
-    Eigen::MatrixXd M_des, K_des, B_des;
     Eigen::VectorXd force_limit_;
 	double kp_pos_, kp_rot_, dz_force_, dz_torque_;
     

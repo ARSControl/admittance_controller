@@ -132,15 +132,15 @@ void AdmittanceControl::check_params()
     }
 
     // Fill matrices values
-    M_des_ = Eigen::Matrix<double, 6, 6>::Zero();
-    K_des_ = Eigen::Matrix<double, 6, 6>::Zero();
-    B_des_ = Eigen::Matrix<double, 6, 6>::Zero();
+    Eigen::Matrix<double, 6, 6> M_des = Eigen::Matrix<double, 6, 6>::Zero();
+    Eigen::Matrix<double, 6, 6> K_des = Eigen::Matrix<double, 6, 6>::Zero();
+    Eigen::Matrix<double, 6, 6> B_des = Eigen::Matrix<double, 6, 6>::Zero();
 
     for (uint i = 0; i < 6; i++)
     {
-        M_des_(i, i) = m_d[i];
-        K_des_(i, i) = k_d[i];
-        B_des_(i, i) = b_d[i];
+        M_des(i, i) = m_d[i];
+        K_des(i, i) = k_d[i];
+        B_des(i, i) = b_d[i];
     }
 
     // Init interaction params
@@ -213,57 +213,57 @@ void AdmittanceControl::check_params()
     }
 
     // Create an instance of AdmittanceController
-    adm_controller_ = new AdmittanceController(M_des_, K_des_, B_des_,
+    adm_controller_ = new AdmittanceController(M_des, K_des, B_des,
                                                n_joints_,  1/loop_rate_,
                                                dz_force_,  dz_torque_,
                                                kp_pos_,    kp_rot_);
 
 }
 
-// ---------------------------- UTILS --------------------------
+// ------------------------------------ UTILS -------------------------- ------- //
 
 
 // ----------------------------- VARIABLE ADMITTANCE --------------------------- //
 void AdmittanceControl::changeMassAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
 {
-    M_des_(0,0) = new_params->x;
-    M_des_(1,1) = new_params->y;
-    M_des_(2,2) = new_params->z;
+    adm_controller_->setAdmittanceParam(0,0,new_params->x);
+    adm_controller_->setAdmittanceParam(0,1,new_params->y);
+    adm_controller_->setAdmittanceParam(0,2,new_params->z);
 }
 
 void AdmittanceControl::changeDampAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
 {
-    B_des_(0,0) = new_params->x;
-    B_des_(1,1) = new_params->y;
-    B_des_(2,2) = new_params->z;
+    adm_controller_->setAdmittanceParam(1,0,new_params->x);
+    adm_controller_->setAdmittanceParam(1,1,new_params->y);
+    adm_controller_->setAdmittanceParam(1,2,new_params->z);
 }
 
 void AdmittanceControl::changeStiffAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
 {
-    K_des_(0,0) = new_params->x;
-    K_des_(1,1) = new_params->y;
-    K_des_(2,2) = new_params->z;
+    adm_controller_->setAdmittanceParam(2,0,new_params->x);
+    adm_controller_->setAdmittanceParam(2,1,new_params->y);
+    adm_controller_->setAdmittanceParam(2,2,new_params->z);
 }
 
 void AdmittanceControl::changeMassRotAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
 {
-    M_des_(3,3) = new_params->x;
-    M_des_(4,4) = new_params->y;
-    M_des_(5,5) = new_params->z;
+    adm_controller_->setAdmittanceParam(3,0,new_params->x);
+    adm_controller_->setAdmittanceParam(3,1,new_params->y);
+    adm_controller_->setAdmittanceParam(3,2,new_params->z);
 }
 
 void AdmittanceControl::changeDampRotAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
 {
-    B_des_(3,3) = new_params->x;
-    B_des_(4,4) = new_params->y;
-    B_des_(5,5) = new_params->z;
+    adm_controller_->setAdmittanceParam(4,0,new_params->x);
+    adm_controller_->setAdmittanceParam(4,1,new_params->y);
+    adm_controller_->setAdmittanceParam(4,2,new_params->z);
 }
 
 void AdmittanceControl::changeStiffRotAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
 {
-    K_des_(3,3) = new_params->x;
-    K_des_(4,4) = new_params->y;
-    K_des_(5,5) = new_params->z;
+    adm_controller_->setAdmittanceParam(5,0,new_params->x);
+    adm_controller_->setAdmittanceParam(5,1,new_params->y);
+    adm_controller_->setAdmittanceParam(5,2,new_params->z);
 }
 
 // --------------------- QUATERNIONS HANDLER -------------------

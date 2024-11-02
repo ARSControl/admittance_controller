@@ -62,6 +62,10 @@ public:
                           const Eigen::Matrix<double, 6, 6> &Bdes,
                           const Eigen::Matrix<double, 6, 6> &Kdes);
 
+    void setAdmittanceParam(const unsigned int  &matrix,
+                            const unsigned int  &index,
+                            const double        &value);
+
     // Enable/disable admittance
     void enableAdmittance();
     void disableAdmittance();

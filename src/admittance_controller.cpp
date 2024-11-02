@@ -148,6 +148,37 @@ bool AdmittanceController::changeParameters(const Eigen::Matrix<double, 6, 6> &M
     return true;
 }
 
+// Change a specific value of the admittance matrices
+void AdmittanceController::setAdmittanceParam(  const unsigned int  &matrix,
+                                                const unsigned int  &index,
+                                                const double        &value)
+{
+    // Arguments details:
+    // matrix: 0 (mass), 1 (damping), 2 (stiffness)
+    // index : 0 (tx), 1 (ty), 2 (tz), 3 (rx), 4 (ry), 5 (rz)
+    // value : the value to insert in the matrix
+    // Example: setAdmittanceParam(1,2,value) -> K_des_(2,2) = value
+
+    switch(matrix)
+    {
+        case 0:
+            {
+                M_des_(index,index) = value;
+            }
+            break;
+        case 1:
+            {
+                B_des_(index,index) = value;
+            }
+            break;
+        case 2:
+            {
+                K_des_(index,index) = value;
+            }
+            break;
+    }
+}
+
 // ------------------------- ADMITTANCE ENABLE/DISABLE --------------------------
 
 // Method to enable admittance control
@@ -268,7 +299,6 @@ Eigen::VectorXd AdmittanceController::computeError(const Eigen::VectorXd &preal,
     if (theta != theta)
     {
         theta = 0.0;
-        std::cout << "Theta correction: " << theta << std::endl;
     }        
 
     Eigen::Quaterniond dq;
