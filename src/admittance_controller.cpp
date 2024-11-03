@@ -78,9 +78,10 @@ Eigen::VectorXd AdmittanceController::computeQSpeed(      Eigen::VectorXd &wrenc
     Eigen::VectorXd ddx = ddx_des + M_des_.inverse() * (wrench + B_des_ * (dx_des - dx) + K_des_ * err);
 
     // Apply the low-pass filter to the acceleration 
-    std::vector<double> ddx_tmp = std::vector<double>(ddx.data(), ddx.data() + ddx.size());
-    ddx_filter_->filter(ddx_tmp);
-    for (uint i = 0; i < 6; i++)    {ddx(i) = ddx_tmp[i];}
+    // Eigen::VectorXd ddx_tmp = std::vector<double>(ddx.data(), ddx.data() + ddx.size());
+    // ddx_filter_->filter(ddx_tmp);
+    // for (uint i = 0; i < 6; i++)    {ddx(i) = ddx_tmp[i];}
+    ddx = ddx_filter_->filter(ddx);
 
     // Increment the speed setpoint
     Eigen::VectorXd dx_res = dx + ddx * ts_;
@@ -114,18 +115,11 @@ Eigen::VectorXd AdmittanceController::computeEESpeed(     Eigen::VectorXd &wrenc
     // Compute the acceleration of the system
     Eigen::VectorXd ddx = ddx_des + M_des_.inverse() * (wrench + B_des_ * (dx_des - dx) + K_des_ * pose_err);
 
-    if (ddx(0)!=ddx(0)) {
-        ROS_INFO("Acc none"); 
-        ros::Duration(10.0).sleep();
-    }
-
     // Apply the low-pass filter to the acceleration 
-    std::vector<double> ddx_tmp = std::vector<double>(ddx.data(), ddx.data() + ddx.size());
-    ddx_filter_->filter(ddx_tmp);
-
-    // if (ddx_filter_(0)!=ddx_filter_(0)) {ROS_INFO("Acc filter none"); ros::Duration(5.0).sleep();}
-
-    for (uint i = 0; i < 6; i++)    {ddx(i) = ddx_tmp[i];}
+    // Eigen::VectorXd ddx_tmp = std::vector<double>(ddx.data(), ddx.data() + ddx.size());
+    // ddx_filter_->filter(ddx_tmp);
+    // for (uint i = 0; i < 6; i++)    {ddx(i) = ddx_tmp[i];}
+    ddx = ddx_filter_->filter(ddx);
 
     // Increment the speed setpoint
     dx_res = dx + ddx * ts_;
@@ -187,7 +181,8 @@ void AdmittanceController::enableAdmittance()
     // Reset velocities and filter
     // dq_.setZero();
     // dx_.setZero();
-    ddx_filter_->reset(std::vector<double>(6, 0.0));
+    Eigen::VectorXd reset_data = Eigen::VectorXd::Zero(6); 
+    ddx_filter_->reset(reset_data);
 
     // Activate admittance control
     admittance_active_ = true;
@@ -199,7 +194,8 @@ void AdmittanceController::disableAdmittance()
     // Reset velocities and filter
     // dq_.setZero();
     // dx_.setZero();
-    ddx_filter_->reset(std::vector<double>(6, 0.0));
+    Eigen::VectorXd reset_data = Eigen::VectorXd::Zero(6); 
+    ddx_filter_->reset(reset_data);
 
     // Disable admittance control
     admittance_active_ = false;
