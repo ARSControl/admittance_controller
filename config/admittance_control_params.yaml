@@ -35,4 +35,4 @@ zero_ft_topic:    "/ur_rtde/zeroFTSensor"               # server to reset the fo
 
 ee_pose_topic:    "/manipulator/tcp_pose"               # topic to read tcp pose, default "/ur_rtde/cartesian_pose" or "/manipulator/tcp_pose" 
 
-ee_vel_topic:     "/manipulator/tcp_vel"                # topic to read tcp pose, default "/manipulator/tcp_vel" or "/manipulator/tcp_vel"
+ee_vel_topic:     "/manipulator/cmd_vel"                # topic to read tcp vel,  default "/manipulator/tcp_vel"    or "/manipulator/cmd_vel"

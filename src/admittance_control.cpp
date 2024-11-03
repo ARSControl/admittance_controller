@@ -349,12 +349,12 @@ void AdmittanceControl::jointCallback(const sensor_msgs::JointState::ConstPtr& m
 // Robot twist callback
 void AdmittanceControl::tcpTwistCallback(const geometry_msgs::Twist::ConstPtr& msg)
 {
-    // dx_(0) = msg->linear.x;
-    // dx_(1) = msg->linear.y;
-    // dx_(2) = msg->linear.z;
-    // dx_(3) = msg->angular.x;
-    // dx_(4) = msg->angular.y;
-    // dx_(5) = msg->angular.z;
+    dx_(0) = msg->linear.x;
+    dx_(1) = msg->linear.y;
+    dx_(2) = msg->linear.z;
+    dx_(3) = msg->angular.x;
+    dx_(4) = msg->angular.y;
+    dx_(5) = msg->angular.z;
 }
 
 // --------------------------- JACOBIAN COMPUTATIONS -----------------------------------
@@ -511,9 +511,6 @@ void AdmittanceControl::admittance_control_main()
 
         // Compute robot speed as impedance control output
         dx = adm_controller_->computeEESpeed(wrench_,ee_pose_,xd_,dx_,dx_des_,ddx_des_);
-
-        // Update ee measued speed as admittance output (TODO: add a filter to vel measure)
-        dx_ = dx;
 
         // Convert the vel msg as ROS msg
         geometry_msgs::Twist ee_vel;

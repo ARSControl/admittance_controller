@@ -53,6 +53,10 @@ AdmittanceController::AdmittanceController(const Eigen::Matrix<double, 6, 6> &Md
 }
 
 // ----------------------------- ADMITTANCE  ----------------------------------- //
+void setToZeroIfSmall(double &value)
+{
+    if (std::abs(value) < 1e-3) {value = 0.0;}
+}
 
 // Method to compute joints velocities for kdl mode
 Eigen::VectorXd AdmittanceController::computeQSpeed(      Eigen::VectorXd &wrench,
@@ -68,6 +72,7 @@ Eigen::VectorXd AdmittanceController::computeQSpeed(      Eigen::VectorXd &wrenc
     if (!admittance_active_) {return dq;}
 
     // Compute force considering dead signal
+    // wrench = wrench_filter_->filter(wrench);
     computeDeadSignal(wrench, dead_zone_force_, dead_zone_torque_);
 
     // Compute pose error
@@ -88,6 +93,9 @@ Eigen::VectorXd AdmittanceController::computeQSpeed(      Eigen::VectorXd &wrenc
 
     // Compute the speed setpoint to all joints
     dq = jacobian.completeOrthogonalDecomposition().pseudoInverse() * (dx_res + K_int_ * err);
+
+    // Set a minimum speed value
+    for (unsigned int k = 0; k < n_joints_; k++) {setToZeroIfSmall(dq[k]);}
 
     // Return dq result
     return dq;
@@ -123,6 +131,9 @@ Eigen::VectorXd AdmittanceController::computeEESpeed(     Eigen::VectorXd &wrenc
 
     // Increment the speed setpoint
     dx_res = dx + ddx * ts_;
+
+    // Set a minimum speed value
+    for (unsigned int k = 0; k < 6; k++) {setToZeroIfSmall(dx_res[k]);}
 
     // Return dx result
     return dx_res + K_int_ * pose_err;
