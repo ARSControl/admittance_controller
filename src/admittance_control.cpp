@@ -76,6 +76,9 @@ AdmittanceControl::AdmittanceControl(const std::string& node_name)
 
     // Create service client to zero the force-torque sensor
     ft_client_ = nh_.serviceClient<std_srvs::Trigger>(zero_ft_sensor_topic_);
+
+    // Initialize low-pass filter for the wrench
+    force_filter_ = new filters::RCFilter(6, 50, 1/loop_rate_);
 }
 
 // Node params update
@@ -339,11 +342,6 @@ void AdmittanceControl::jointCallback(const sensor_msgs::JointState::ConstPtr& m
     q_(3) = msg->position[3];
     q_(4) = msg->position[4];
     q_(5) = msg->position[5];
-
-    // if (!mode_bool_)
-    // {
-    //     dx_ = getJacobian()*q_;
-    // }
 }
 
 // Robot twist callback
@@ -495,7 +493,11 @@ void AdmittanceControl::admittance_control_main()
     if (mode_bool_ == false)    // If "kdl" mode is enables
     {
         // Compute the speed of the robot according to the given wrench
-        Eigen::VectorXd dq = adm_controller_->computeQSpeed(wrench_,ee_pose_,xd_,dx_,dx_des_,ddx_des_,getJacobian());
+        Eigen::VectorXd filtered_wrench = force_filter_->filter(wrench_);
+        Eigen::VectorXd dq = adm_controller_->computeQSpeed(filtered_wrench,ee_pose_,xd_,dx_,dx_des_,ddx_des_,getJacobian());
+
+        // Update tcp vel
+        dx_ = getJacobian()*dq;
 
         // Convert the vel msg as ROS msg
         std_msgs::Float64MultiArray joint_vel;
@@ -504,13 +506,14 @@ void AdmittanceControl::admittance_control_main()
         // Send the command to the robot
         vel_pub_.publish(joint_vel);
     }
-    else    // If "moveit" mode is enables
+    else    // If "moveit" mode is enabled
     {
-        // Compute the speed of the robot according to the given wrench
-        Eigen::VectorXd dx = Eigen::VectorXd::Zero(6);
+        // Compute the speed of as impedance control output
+        Eigen::VectorXd filtered_wrench = force_filter_->filter(wrench_);
+        Eigen::VectorXd dx = adm_controller_->computeEESpeed(filtered_wrench,ee_pose_,xd_,dx_,dx_des_,ddx_des_);
 
-        // Compute robot speed as impedance control output
-        dx = adm_controller_->computeEESpeed(wrench_,ee_pose_,xd_,dx_,dx_des_,ddx_des_);
+        // If tcp vel is not received by topic, suppose it is actually realized -> TODO: to depracate after tests
+        // dx_ = dx;
 
         // Convert the vel msg as ROS msg
         geometry_msgs::Twist ee_vel;

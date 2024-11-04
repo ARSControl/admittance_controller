@@ -21,8 +21,6 @@ kp_pos:           0.0                                   # kp for position compen
 
 kp_rot:           0.0                                   # kp for rotation compensation
 
-joint_names:      ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]
-
 mode:             "moveit"                              # Planner of the moves, default "kdl" or "moveit"
 
 command_topic:    "manipulator/cmd_vel"                 # vel command to the manipulator's ee, default
@@ -36,3 +34,5 @@ zero_ft_topic:    "/ur_rtde/zeroFTSensor"               # server to reset the fo
 ee_pose_topic:    "/manipulator/tcp_pose"               # topic to read tcp pose, default "/ur_rtde/cartesian_pose" or "/manipulator/tcp_pose" 
 
 ee_vel_topic:     "/manipulator/cmd_vel"                # topic to read tcp vel,  default "/manipulator/tcp_vel"    or "/manipulator/cmd_vel"
+
+joint_names:      ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]

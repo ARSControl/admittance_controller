@@ -55,7 +55,7 @@ AdmittanceController::AdmittanceController(const Eigen::Matrix<double, 6, 6> &Md
 // ----------------------------- ADMITTANCE  ----------------------------------- //
 void setToZeroIfSmall(double &value)
 {
-    if (std::abs(value) < 1e-3) {value = 0.0;}
+    if (std::abs(value) < 1e-20) {value = 0.0;}
 }
 
 // Method to compute joints velocities for kdl mode
@@ -76,8 +76,7 @@ Eigen::VectorXd AdmittanceController::computeQSpeed(      Eigen::VectorXd &wrenc
     computeDeadSignal(wrench, dead_zone_force_, dead_zone_torque_);
 
     // Compute pose error
-    Eigen::VectorXd err = Eigen::VectorXd::Zero(6);
-    err = computeError(ee_pose, xd);
+    Eigen::VectorXd err = computeError(ee_pose, xd);
 
     // Compute the acceleration of the system
     Eigen::VectorXd ddx = ddx_des + M_des_.inverse() * (wrench + B_des_ * (dx_des - dx) + K_des_ * err);
@@ -117,8 +116,7 @@ Eigen::VectorXd AdmittanceController::computeEESpeed(     Eigen::VectorXd &wrenc
     computeDeadSignal(wrench, dead_zone_force_, dead_zone_torque_);
 
     // Compute pose error
-    Eigen::VectorXd pose_err = Eigen::VectorXd::Zero(6);
-    pose_err = computeError(ee_pose, xd);
+    Eigen::VectorXd pose_err = computeError(ee_pose, xd);
 
     // Compute the acceleration of the system
     Eigen::VectorXd ddx = ddx_des + M_des_.inverse() * (wrench + B_des_ * (dx_des - dx) + K_des_ * pose_err);

@@ -114,6 +114,9 @@ private:
     
     // KDL instance (for mode "kdl")
     ManipulatorKDL* robot_kdl_;
+
+    // Wrench filter
+    filters::RCFilter* force_filter_;
     
     // Matrices and vectors for control
     Eigen::VectorXd q_, xd_, dx_, dx_des_, ddx_des_, wrench_, ee_pose_;
