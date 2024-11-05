@@ -512,9 +512,6 @@ void AdmittanceControl::admittance_control_main()
         Eigen::VectorXd filtered_wrench = force_filter_->filter(wrench_);
         Eigen::VectorXd dx = adm_controller_->computeEESpeed(filtered_wrench,ee_pose_,xd_,dx_,dx_des_,ddx_des_);
 
-        // If tcp vel is not received by topic, suppose it is actually realized -> TODO: to depracate after tests
-        // dx_ = dx;
-
         // Convert the vel msg as ROS msg
         geometry_msgs::Twist ee_vel;
         ee_vel.linear.x  = dx(0);

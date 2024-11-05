@@ -58,6 +58,22 @@ void setToZeroIfSmall(double &value)
     if (std::abs(value) < 1e-20) {value = 0.0;}
 }
 
+void AdmittanceController::pushRegulation(const Eigen::VectorXd &wrench,Eigen::VectorXd &xd)
+{
+    // If the robot is in contact with something over +x direction
+    if (wrench(0) > 0.1)
+    {
+        if (wrench(0) > 5.0)    xd(0) -= wrench(0)/K_des_(0,0);
+        else                    xd(0) += wrench(0)/K_des_(0,0);
+    }
+    // If the robot is in contact with something over -x direction
+    else if (wrench(0) < -0.1)
+    {
+        if (wrench(0) < -5.0)   xd(0) += wrench(0)/K_des_(0,0);
+        else                    xd(0) -= wrench(0)/K_des_(0,0);
+    }
+}
+
 // Method to compute joints velocities for kdl mode
 Eigen::VectorXd AdmittanceController::computeQSpeed(      Eigen::VectorXd &wrench,
                                                     const Eigen::VectorXd &ee_pose,
@@ -103,7 +119,7 @@ Eigen::VectorXd AdmittanceController::computeQSpeed(      Eigen::VectorXd &wrenc
 // Method to compute joints velocities for kdl mode
 Eigen::VectorXd AdmittanceController::computeEESpeed(     Eigen::VectorXd &wrench,
                                                     const Eigen::VectorXd &ee_pose,
-                                                    const Eigen::VectorXd &xd,
+                                                          Eigen::VectorXd &xd,
                                                     const Eigen::VectorXd &dx,
                                                     const Eigen::VectorXd &dx_des,
                                                     const Eigen::VectorXd &ddx_des)
@@ -112,8 +128,11 @@ Eigen::VectorXd AdmittanceController::computeEESpeed(     Eigen::VectorXd &wrenc
     Eigen::VectorXd dx_res = Eigen::VectorXd::Zero(6);
     if (!admittance_active_) {return dx_res;}
 
-    // Compute force considering dead signal
+    // Compute force considering dead signal (wrench must be eventually alredy filtered)
     computeDeadSignal(wrench, dead_zone_force_, dead_zone_torque_);
+
+    // Update xd to adapt to external force over interaction direction
+    pushRegulation(wrench,xd);
 
     // Compute pose error
     Eigen::VectorXd pose_err = computeError(ee_pose, xd);

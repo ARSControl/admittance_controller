@@ -52,7 +52,7 @@ public:
 
     Eigen::VectorXd computeEESpeed(		 Eigen::VectorXd &wrench,
                                    const Eigen::VectorXd &ee_pose,
-                                   const Eigen::VectorXd &xd,
+                                         Eigen::VectorXd &xd,
                                    const Eigen::VectorXd &dx,
                                    const Eigen::VectorXd &dx_des,
                                    const Eigen::VectorXd &ddx_des);
@@ -76,6 +76,7 @@ private:
     void cutSignal(double &x, const double &dead_zone);
     void computeDeadSignal(Eigen::VectorXd &f, const double &dead_zone_force, const double &dead_zone_torque);
     void setDeadZone(const double &dead_zone_force, const double &dead_zone_torque);
+    void pushRegulation(const Eigen::VectorXd &wrench,Eigen::VectorXd &xd);
 
     // Quaternion handling
     void exponentialMapQuaternion(Eigen::Quaterniond &q);
