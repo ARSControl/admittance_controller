@@ -39,20 +39,22 @@ public:
                          const Eigen::Matrix<double, 6, 6> &Bdes,
                          const double& n_joints, const double& ts,
                          const double& dz_force, const double& dz_torque,
-                         const double& kp_pos, const double& kp_rot);
+                         const double& kp_pos,   const double& kp_rot,
+                         const double& kp_push,  const double& push_force_goal,
+                         const double& safe_push_dist);
 
     // Admittance methods
     Eigen::VectorXd computeQSpeed(		Eigen::VectorXd &wrench,
-                                  const Eigen::VectorXd &ee_pose,
                                   const Eigen::VectorXd &xd,
+                                  const Eigen::VectorXd &ee_pose,
                                   const Eigen::VectorXd &dx,
                                   const Eigen::VectorXd &dx_des,
                                   const Eigen::VectorXd &ddx_des,
                                   const Eigen::MatrixXd &jacobian);
 
     Eigen::VectorXd computeEESpeed(		 Eigen::VectorXd &wrench,
+                                   const Eigen::VectorXd &xd,
                                    const Eigen::VectorXd &ee_pose,
-                                         Eigen::VectorXd &xd,
                                    const Eigen::VectorXd &dx,
                                    const Eigen::VectorXd &dx_des,
                                    const Eigen::VectorXd &ddx_des);
@@ -69,6 +71,9 @@ public:
     // Enable/disable admittance
     void enableAdmittance();
     void disableAdmittance();
+    // Enable/disable pushing control
+    void enablePush(void);
+    void disablePush(void);
 
 private:
 
@@ -76,7 +81,11 @@ private:
     void cutSignal(double &x, const double &dead_zone);
     void computeDeadSignal(Eigen::VectorXd &f, const double &dead_zone_force, const double &dead_zone_torque);
     void setDeadZone(const double &dead_zone_force, const double &dead_zone_torque);
-    void pushRegulation(const Eigen::VectorXd &wrench,Eigen::VectorXd &xd);
+    Eigen::VectorXd pushRegulation(const Eigen::VectorXd &wrench,const Eigen::VectorXd &xd,const Eigen::VectorXd &ee_pose);
+
+    // Math utils
+    double sign(double value);
+    void setToZeroIfSmall(double &value);
 
     // Quaternion handling
     void exponentialMapQuaternion(Eigen::Quaterniond &q);
@@ -91,7 +100,7 @@ private:
     Eigen::VectorXd computeError(const Eigen::VectorXd &preal, const Eigen::VectorXd &pdes);
 
     // Empty function for future use (computing acceleration)
-    Eigen::MatrixXd computeAcceleration();
+    Eigen::VectorXd computeAcceleration();
 
     // Private member variables
     Eigen::Matrix<double, 6, 6> M_des_, B_des_, K_des_;
@@ -99,8 +108,14 @@ private:
     double n_joints_;
     double ts_;
     double dead_zone_force_, dead_zone_torque_;
-    bool admittance_active_;
+    bool   admittance_active_;
+    bool   pushing_reg_active_;
     filters::RCFilter* ddx_filter_;
+    double kp_push_;
+    double push_force_goal_;
+    double safe_push_dist_;
+    double cumulative_step_;
+    Eigen::VectorXd pushed_xd_;
 };
 
 #endif // ADMITTANCE_CONTROLLER_H

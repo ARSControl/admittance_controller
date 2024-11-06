@@ -57,12 +57,15 @@ private:
     void tcpTwistCallback(const geometry_msgs::Twist::ConstPtr& msg);
     void forceSensorCallback(const geometry_msgs::Wrench::ConstPtr &w);
     void admittanceXdCallback(const geometry_msgs::Pose::ConstPtr &p);
+
+    Eigen::VectorXd wrenchFilter(const Eigen::VectorXd& wrench);
     
     // Main control function
     void admittance_control_main();
     
     // Service callback to enable or disable admittance control
     bool enableAdmittance(std_srvs::SetBool::Request &req, std_srvs::SetBool::Response &res);
+    bool enablePushRegulation(std_srvs::SetBool::Request &req, std_srvs::SetBool::Response &res);
   
 	// Params handler
 	void check_params();                              // Node params update
@@ -93,14 +96,16 @@ private:
     ros::NodeHandle nh_;
     ros::Subscriber joint_sub_, force_sub_, xd_sub_, tcp_pose_sub_, tcp_twist_sub_;
     ros::Publisher vel_pub_;
+    ros::Publisher wf_pub_;
     ros::ServiceServer adm_service_;
+    ros::ServiceServer push_service_;
     ros::ServiceClient ft_client_;
 
     // Topics and other parameters
     std::string command_topic_, force_feed_topic_, zero_ft_sensor_topic_, ee_pose_topic_, ee_vel_topic_;
 	std::string manipulator_name_, manipulator_;
     double loop_rate_;
-    int n_joints_;
+    int    n_joints_;
     std::vector<std::string> joint_names_;
     
     // Controller instance

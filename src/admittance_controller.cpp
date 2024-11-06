@@ -28,9 +28,11 @@
 AdmittanceController::AdmittanceController(const Eigen::Matrix<double, 6, 6> &Mdes,
                                            const Eigen::Matrix<double, 6, 6> &Kdes, 
                                            const Eigen::Matrix<double, 6, 6> &Bdes,
-                                           const double& n_joints,     const double& ts,
-                                           const double& dz_force,     const double& dz_torque,
-                                           const double& kp_pos,       const double& kp_rot)
+                                           const double& n_joints, const double& ts,
+                                           const double& dz_force, const double& dz_torque,
+                                           const double& kp_pos,   const double& kp_rot,
+                                           const double& kp_push,  const double& push_force_goal,
+                                           const double& safe_push_dist)
 {
     // Initialize desired mass, damping, and stiffness matrices
     M_des_ = Mdes;
@@ -48,36 +50,59 @@ AdmittanceController::AdmittanceController(const Eigen::Matrix<double, 6, 6> &Md
     ddx_filter_ = new filters::RCFilter(6, 30, ts_);
 
     // Initialize admittance control parameters
-    admittance_active_ = false;
+    admittance_active_  = false;
+    pushing_reg_active_ = false;
     setDeadZone(dz_force,dz_torque);
+
+    // Inizialize pushing control
+    kp_push_         = kp_push;
+    push_force_goal_ = push_force_goal;
+    safe_push_dist_  = safe_push_dist;
+    cumulative_step_ = 0.;
 }
 
-// ----------------------------- ADMITTANCE  ----------------------------------- //
-void setToZeroIfSmall(double &value)
+// ----------------------------- MATH UTILS  ----------------------------------- //
+void AdmittanceController::setToZeroIfSmall(double &value)
 {
     if (std::abs(value) < 1e-20) {value = 0.0;}
 }
 
-void AdmittanceController::pushRegulation(const Eigen::VectorXd &wrench,Eigen::VectorXd &xd)
+double AdmittanceController::sign(double value)
 {
-    // If the robot is in contact with something over +x direction
-    if (wrench(0) > 0.1)
+    if      (value < 0) {return -1.;}
+    else if (value > 0) {return +1.;}
+    else                {return +0.;}
+}
+
+// ----------------------------- ADMITTANCE  ----------------------------------- //
+Eigen::VectorXd AdmittanceController::pushRegulation(const Eigen::VectorXd &wrench,const Eigen::VectorXd &xd,const Eigen::VectorXd &ee_pose)
+{
+    Eigen::VectorXd pushed_xd = xd;
+    // If the robot is in contact with something over x direction
+    if (wrench(0) < -0.01)
     {
-        if (wrench(0) > 5.0)    xd(0) -= wrench(0)/K_des_(0,0);
-        else                    xd(0) += wrench(0)/K_des_(0,0);
+        // If the robot has not been moved a lot under the pushing task
+        if (std::abs(ee_pose(0) - xd(0)) < safe_push_dist_)
+        {
+            // Update the goal over the pushing direction
+            cumulative_step_ += kp_push_ / K_des_(0,0) * (wrench(0) + push_force_goal_);
+        }
     }
-    // If the robot is in contact with something over -x direction
-    else if (wrench(0) < -0.1)
+    // If the robot is no more in contact, reset the pushing distance adjustement
+    else
     {
-        if (wrench(0) < -5.0)   xd(0) += wrench(0)/K_des_(0,0);
-        else                    xd(0) -= wrench(0)/K_des_(0,0);
+        cumulative_step_ = 0.;
     }
+
+    // Return the result
+    pushed_xd(0) = xd(0) + cumulative_step_;
+    return pushed_xd;
 }
 
 // Method to compute joints velocities for kdl mode
 Eigen::VectorXd AdmittanceController::computeQSpeed(      Eigen::VectorXd &wrench,
-                                                    const Eigen::VectorXd &ee_pose,
                                                     const Eigen::VectorXd &xd,
+                                                    const Eigen::VectorXd &ee_pose,
                                                     const Eigen::VectorXd &dx,
                                                     const Eigen::VectorXd &dx_des,
                                                     const Eigen::VectorXd &ddx_des,
@@ -91,11 +116,16 @@ Eigen::VectorXd AdmittanceController::computeQSpeed(      Eigen::VectorXd &wrenc
     // wrench = wrench_filter_->filter(wrench);
     computeDeadSignal(wrench, dead_zone_force_, dead_zone_torque_);
 
+    // Update xd to adapt to external force over interaction direction
+    Eigen::VectorXd des_pose = Eigen::VectorXd::Zero(7);
+    if (pushing_reg_active_)    {des_pose = pushRegulation(wrench,xd,ee_pose);}
+    else                        {des_pose = xd;}
+
     // Compute pose error
-    Eigen::VectorXd err = computeError(ee_pose, xd);
+    Eigen::VectorXd pose_err = computeError(ee_pose, des_pose);
 
     // Compute the acceleration of the system
-    Eigen::VectorXd ddx = ddx_des + M_des_.inverse() * (wrench + B_des_ * (dx_des - dx) + K_des_ * err);
+    Eigen::VectorXd ddx = ddx_des + M_des_.inverse() * (wrench + B_des_ * (dx_des - dx) + K_des_ * pose_err);
 
     // Apply the low-pass filter to the acceleration 
     // Eigen::VectorXd ddx_tmp = std::vector<double>(ddx.data(), ddx.data() + ddx.size());
@@ -107,7 +137,7 @@ Eigen::VectorXd AdmittanceController::computeQSpeed(      Eigen::VectorXd &wrenc
     Eigen::VectorXd dx_res = dx + ddx * ts_;
 
     // Compute the speed setpoint to all joints
-    dq = jacobian.completeOrthogonalDecomposition().pseudoInverse() * (dx_res + K_int_ * err);
+    dq = jacobian.completeOrthogonalDecomposition().pseudoInverse() * (dx_res + K_int_ * pose_err);
 
     // Set a minimum speed value
     for (unsigned int k = 0; k < n_joints_; k++) {setToZeroIfSmall(dq[k]);}
@@ -118,8 +148,8 @@ Eigen::VectorXd AdmittanceController::computeQSpeed(      Eigen::VectorXd &wrenc
 
 // Method to compute joints velocities for kdl mode
 Eigen::VectorXd AdmittanceController::computeEESpeed(     Eigen::VectorXd &wrench,
+                                                    const Eigen::VectorXd &xd,
                                                     const Eigen::VectorXd &ee_pose,
-                                                          Eigen::VectorXd &xd,
                                                     const Eigen::VectorXd &dx,
                                                     const Eigen::VectorXd &dx_des,
                                                     const Eigen::VectorXd &ddx_des)
@@ -132,10 +162,12 @@ Eigen::VectorXd AdmittanceController::computeEESpeed(     Eigen::VectorXd &wrenc
     computeDeadSignal(wrench, dead_zone_force_, dead_zone_torque_);
 
     // Update xd to adapt to external force over interaction direction
-    pushRegulation(wrench,xd);
+    Eigen::VectorXd des_pose = Eigen::VectorXd::Zero(7);
+    if (pushing_reg_active_)    {des_pose = pushRegulation(wrench,xd,ee_pose);}
+    else                        {des_pose = xd;}
 
     // Compute pose error
-    Eigen::VectorXd pose_err = computeError(ee_pose, xd);
+    Eigen::VectorXd pose_err = computeError(ee_pose, des_pose);
 
     // Compute the acceleration of the system
     Eigen::VectorXd ddx = ddx_des + M_des_.inverse() * (wrench + B_des_ * (dx_des - dx) + K_des_ * pose_err);
@@ -227,6 +259,18 @@ void AdmittanceController::disableAdmittance()
 
     // Disable admittance control
     admittance_active_ = false;
+}
+
+// Method to enable pushing control
+void AdmittanceController::enablePush()
+{
+    pushing_reg_active_ = true;
+}
+
+// Method to disable pushing control
+void AdmittanceController::disablePush()
+{
+    pushing_reg_active_ = false;
 }
 
 // ------------------------------ FORCE HANDLING ---------------------------
@@ -347,9 +391,9 @@ Eigen::VectorXd AdmittanceController::computeError(const Eigen::VectorXd &preal,
 }
 
 // Empty private function to compute acceleration, still not implemented
-Eigen::MatrixXd AdmittanceController::computeAcceleration()
+Eigen::VectorXd AdmittanceController::computeAcceleration()
 {
     // Maybe if implementing the admittance control on a torque controlled robot will be needed
-    Eigen::MatrixXd matrix;
-    return matrix;
+    Eigen::VectorXd vector = Eigen::VectorXd::Zero(6);
+    return vector;
 }

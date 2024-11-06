@@ -58,6 +58,7 @@ AdmittanceControl::AdmittanceControl(const std::string& node_name)
     m_adm_rot_sub_ = nh_.subscribe(manipulator_name_+"/m_adm_rot", 1, &AdmittanceControl::changeMassRotAdmittanceCallback, this);
     b_adm_rot_sub_ = nh_.subscribe(manipulator_name_+"/b_adm_rot", 1, &AdmittanceControl::changeDampRotAdmittanceCallback, this);
     k_adm_rot_sub_ = nh_.subscribe(manipulator_name_+"/k_adm_rot", 1, &AdmittanceControl::changeStiffRotAdmittanceCallback, this);
+
     // Load and apply parameters
     if (mode_ == "kdl")
     {
@@ -72,13 +73,17 @@ AdmittanceControl::AdmittanceControl(const std::string& node_name)
     tcp_twist_sub_ = nh_.subscribe(ee_vel_topic_, 1,&AdmittanceControl::tcpTwistCallback,this);
 
     // Advertise service to enable admittance control
-    adm_service_ = nh_.advertiseService(manipulator_name_+"/enable_admittance", &AdmittanceControl::enableAdmittance, this);
+    adm_service_  = nh_.advertiseService(manipulator_name_+"/enable_admittance", &AdmittanceControl::enableAdmittance, this);
+    push_service_ = nh_.advertiseService(manipulator_name_+"/enable_push_regulation", &AdmittanceControl::enablePushRegulation, this);
 
     // Create service client to zero the force-torque sensor
     ft_client_ = nh_.serviceClient<std_srvs::Trigger>(zero_ft_sensor_topic_);
 
+    // Create a publisher to show the filtered msh
+    wf_pub_ = nh_.advertise<geometry_msgs::Wrench>(manipulator_name_+"/filtered_wrench",1);
+
     // Initialize low-pass filter for the wrench
-    force_filter_ = new filters::RCFilter(6, 50, 1/loop_rate_);
+    force_filter_ = new filters::RCFilter(6, 100, 1/loop_rate_);
 }
 
 // Node params update
@@ -196,7 +201,7 @@ void AdmittanceControl::check_params()
         ROS_WARN("Force feedback topic param not set, using default: /ur_rtde/ft_sensor.");
         force_feed_topic_ = "/ur_rtde/ft_sensor";
     }
-    // Zero force feed server
+    // Zero force feed zero server
     if (!nh_.getParam(node_name_+"/zero_ft_topic", zero_ft_sensor_topic_))
     {
         ROS_WARN("Zero force feedback server name param not set, using default: /ur_rtde/zeroFTSensor");
@@ -208,18 +213,38 @@ void AdmittanceControl::check_params()
         ROS_WARN("EE pose topic param not set, using default: /ur_rtde/cartesian_pose.");
         ee_pose_topic_ = "/ur_rtde/cartesian_pose";
     }
-    // Init pose feedback topic
+    // Init vel feedback topic
     if (!nh_.getParam(node_name_+"/ee_vel_topic", ee_vel_topic_))
     {
         ROS_WARN("EE vel topic param not set, using default: /manipulator/tcp_vel.");
         ee_vel_topic_ = "/manipulator/tcp_vel";
     }
 
+    // Init pushing interaction params
+    double kp_push, push_force_goal, safe_push_dist;
+    if (!nh_.getParam(node_name_+"/kp_push", kp_push))
+    {
+        ROS_WARN("Proportional gain for pushing task not set, using default: 0.01 .");
+        kp_push = 0.1;
+    }
+    if (!nh_.getParam(node_name_+"/push_force_goal", push_force_goal))
+    {
+        ROS_WARN("Goal force for pushing task not set, using default: 3.0 .");
+        push_force_goal = 3.0;
+    }
+    if (!nh_.getParam(node_name_+"/safe_push_dist", safe_push_dist))
+    {
+        ROS_WARN("Safety distance for pushing task not set, using default: 0.25 .");
+        safe_push_dist = 0.25;
+    }
+
     // Create an instance of AdmittanceController
     adm_controller_ = new AdmittanceController(M_des, K_des, B_des,
                                                n_joints_,  1/loop_rate_,
                                                dz_force_,  dz_torque_,
-                                               kp_pos_,    kp_rot_);
+                                               kp_pos_,    kp_rot_,
+                                               kp_push,    push_force_goal,
+                                               safe_push_dist);
 
 }
 
@@ -396,6 +421,23 @@ void AdmittanceControl::forceSensorCallback(const geometry_msgs::Wrench::ConstPt
     wrench_(5) = w->torque.z;
 }
 
+Eigen::VectorXd AdmittanceControl::wrenchFilter(const Eigen::VectorXd& wrench)
+{
+    Eigen::VectorXd filtered_wrench = force_filter_->filter(wrench);
+
+    geometry_msgs::Wrench wrench_msg;
+    wrench_msg.force.x  = filtered_wrench(0);
+    wrench_msg.force.y  = filtered_wrench(1);
+    wrench_msg.force.z  = filtered_wrench(2);
+    wrench_msg.torque.x = filtered_wrench(3);
+    wrench_msg.torque.y = filtered_wrench(4);
+    wrench_msg.torque.z = filtered_wrench(5);
+
+    wf_pub_.publish(wrench_msg);
+
+    return filtered_wrench;
+}
+
 // ----------------------------- SETPOINT UPDATE -----------------------------
 void AdmittanceControl::admittanceXdCallback(const geometry_msgs::Pose::ConstPtr &p)
 {
@@ -434,6 +476,30 @@ bool AdmittanceControl::enableAdmittance(std_srvs::SetBool::Request  &req,
     {
         // Disable admittance control
         adm_controller_->disableAdmittance();
+    }
+    res.success = true;
+    return true;
+}
+
+// Service callback to enable or disable admittance control
+bool AdmittanceControl::enablePushRegulation(std_srvs::SetBool::Request  &req,
+                                             std_srvs::SetBool::Response &res)
+{
+    if (req.data)
+    {
+        // Enable admittance control
+        adm_controller_->enablePush();
+
+        // Set the desired pose equal to the current pose
+        xd_ = ee_pose_;
+    }
+    else
+    {
+        // Disable admittance control
+        adm_controller_->disablePush();
+        
+        // Set the desired pose equal to the current pose
+        xd_ = ee_pose_;
     }
     res.success = true;
     return true;
@@ -493,8 +559,8 @@ void AdmittanceControl::admittance_control_main()
     if (mode_bool_ == false)    // If "kdl" mode is enables
     {
         // Compute the speed of the robot according to the given wrench
-        Eigen::VectorXd filtered_wrench = force_filter_->filter(wrench_);
-        Eigen::VectorXd dq = adm_controller_->computeQSpeed(filtered_wrench,ee_pose_,xd_,dx_,dx_des_,ddx_des_,getJacobian());
+        Eigen::VectorXd filtered_wrench = wrenchFilter(wrench_);
+        Eigen::VectorXd dq = adm_controller_->computeQSpeed(filtered_wrench,xd_,ee_pose_,dx_,dx_des_,ddx_des_,getJacobian());
 
         // Update tcp vel
         dx_ = getJacobian()*dq;
@@ -509,8 +575,8 @@ void AdmittanceControl::admittance_control_main()
     else    // If "moveit" mode is enabled
     {
         // Compute the speed of as impedance control output
-        Eigen::VectorXd filtered_wrench = force_filter_->filter(wrench_);
-        Eigen::VectorXd dx = adm_controller_->computeEESpeed(filtered_wrench,ee_pose_,xd_,dx_,dx_des_,ddx_des_);
+        Eigen::VectorXd filtered_wrench = wrenchFilter(wrench_);
+        Eigen::VectorXd dx = adm_controller_->computeEESpeed(filtered_wrench,xd_,ee_pose_,dx_,dx_des_,ddx_des_);
 
         // Convert the vel msg as ROS msg
         geometry_msgs::Twist ee_vel;
