@@ -78,6 +78,7 @@ double AdmittanceController::sign(double value)
 Eigen::VectorXd AdmittanceController::pushRegulation(const Eigen::VectorXd &wrench,const Eigen::VectorXd &xd,const Eigen::VectorXd &ee_pose)
 {
     Eigen::VectorXd pushed_xd = xd;
+
     // If the robot is in contact with something over x direction
     if (wrench(0) < -0.01)
     {
@@ -113,24 +114,17 @@ Eigen::VectorXd AdmittanceController::computeQSpeed(      Eigen::VectorXd &wrenc
     if (!admittance_active_) {return dq;}
 
     // Compute force considering dead signal
-    // wrench = wrench_filter_->filter(wrench);
     computeDeadSignal(wrench, dead_zone_force_, dead_zone_torque_);
 
-    // Update xd to adapt to external force over interaction direction
-    Eigen::VectorXd des_pose = Eigen::VectorXd::Zero(7);
-    if (pushing_reg_active_)    {des_pose = pushRegulation(wrench,xd,ee_pose);}
-    else                        {des_pose = xd;}
-
-    // Compute pose error
-    Eigen::VectorXd pose_err = computeError(ee_pose, des_pose);
+    // Update xd to adapt to external force over interaction direction, then compute pose error
+    Eigen::VectorXd pose_err;
+    if (pushing_reg_active_)    {pose_err = computeError(ee_pose, pushRegulation(wrench,xd,ee_pose));}
+    else                        {pose_err = computeError(ee_pose, xd);}
 
     // Compute the acceleration of the system
     Eigen::VectorXd ddx = ddx_des + M_des_.inverse() * (wrench + B_des_ * (dx_des - dx) + K_des_ * pose_err);
 
-    // Apply the low-pass filter to the acceleration 
-    // Eigen::VectorXd ddx_tmp = std::vector<double>(ddx.data(), ddx.data() + ddx.size());
-    // ddx_filter_->filter(ddx_tmp);
-    // for (uint i = 0; i < 6; i++)    {ddx(i) = ddx_tmp[i];}
+    // Apply the low-pass filter to the acceleration
     ddx = ddx_filter_->filter(ddx);
 
     // Increment the speed setpoint
@@ -160,22 +154,16 @@ Eigen::VectorXd AdmittanceController::computeEESpeed(     Eigen::VectorXd &wrenc
 
     // Compute force considering dead signal (wrench must be eventually alredy filtered)
     computeDeadSignal(wrench, dead_zone_force_, dead_zone_torque_);
-
-    // Update xd to adapt to external force over interaction direction
-    Eigen::VectorXd des_pose = Eigen::VectorXd::Zero(7);
-    if (pushing_reg_active_)    {des_pose = pushRegulation(wrench,xd,ee_pose);}
-    else                        {des_pose = xd;}
-
-    // Compute pose error
-    Eigen::VectorXd pose_err = computeError(ee_pose, des_pose);
+    
+    // Update xd to adapt to external force over interaction direction, then compute pose error
+    Eigen::VectorXd pose_err;
+    if (pushing_reg_active_)    {pose_err = computeError(ee_pose, pushRegulation(wrench,xd,ee_pose));}
+    else                        {pose_err = computeError(ee_pose, xd);}
 
     // Compute the acceleration of the system
     Eigen::VectorXd ddx = ddx_des + M_des_.inverse() * (wrench + B_des_ * (dx_des - dx) + K_des_ * pose_err);
 
-    // Apply the low-pass filter to the acceleration 
-    // Eigen::VectorXd ddx_tmp = std::vector<double>(ddx.data(), ddx.data() + ddx.size());
-    // ddx_filter_->filter(ddx_tmp);
-    // for (uint i = 0; i < 6; i++)    {ddx(i) = ddx_tmp[i];}
+    // Apply the low-pass filter to the acceleration
     ddx = ddx_filter_->filter(ddx);
 
     // Increment the speed setpoint
