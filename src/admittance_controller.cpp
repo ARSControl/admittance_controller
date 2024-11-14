@@ -58,7 +58,7 @@ AdmittanceController::AdmittanceController(const Eigen::Matrix<double, 6, 6> &Md
     kp_push_         = kp_push;
     push_force_goal_ = push_force_goal;
     safe_push_dist_  = safe_push_dist;
-    cumulative_step_ = 0.;
+    cumulative_step_ = Eigen::VectorXd::Zero(3);
 }
 
 // ----------------------------- MATH UTILS  ----------------------------------- //
@@ -79,24 +79,28 @@ Eigen::VectorXd AdmittanceController::pushRegulation(const Eigen::VectorXd &wren
 {
     Eigen::VectorXd pushed_xd = xd;
 
-    // If the robot is in contact with something over x direction
-    if (wrench(0) < -0.01)
+    // Iterate over the pushing direction
+    for(unsigned int k = 0; k<3; k++)
     {
-        // If the robot has not been moved a lot under the pushing task
-        if (std::abs(ee_pose(0) - xd(0)) < safe_push_dist_)
+        // If the robot is in contact with something over the pushing direction
+        if (wrench(k) < -0.01)
         {
-            // Update the goal over the pushing direction
-            cumulative_step_ += kp_push_ / K_des_(0,0) * (wrench(0) + push_force_goal_);
+            // If the robot has not been moved a lot under the pushing task
+            if (std::abs(ee_pose(k) - xd(k)) < safe_push_dist_)
+            {
+                // Update the goal over the pushing direction
+                cumulative_step_(k) += kp_push_ / K_des_(k,k) * (wrench(k) + push_force_goal_);
+            }
         }
-    }
-    // If the robot is no more in contact, reset the pushing distance adjustement
-    else
-    {
-        cumulative_step_ = 0.;
+        // If the robot is no more in contact, reset the pushing distance adjustement
+        else
+        {
+            cumulative_step_(k) = 0.;
+        }
+        // Return the result
+        pushed_xd(k) += cumulative_step_(k);
     }
 
-    // Return the result
-    pushed_xd(0) = xd(0) + cumulative_step_;
     return pushed_xd;
 }
 

@@ -1,5 +1,5 @@
 # Parameters for the admittance control
-manipulator:      "ur5e"                                # Robot name
+manipulator:      "ur10e"                                # Robot name
 
 manipulator_name: "manipulator"                         # Robot planner group name
 
@@ -41,4 +41,4 @@ kp_push:          0.01                                  # Proportional gain for 
 
 push_force_goal:  3.0                                   # Force goal to be regulated in the pushing task
 
-safe_push_dist:   0.25                                  # Safety distance for the force regulation in the pushing task
+safe_push_dist:   0.20                                  # Safety distance for the force regulation in the pushing task

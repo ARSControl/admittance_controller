@@ -114,8 +114,7 @@ private:
     double kp_push_;
     double push_force_goal_;
     double safe_push_dist_;
-    double cumulative_step_;
-    Eigen::VectorXd pushed_xd_;
+    Eigen::VectorXd cumulative_step_;
 };
 
 #endif // ADMITTANCE_CONTROLLER_H
