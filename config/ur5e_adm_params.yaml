@@ -41,6 +41,6 @@ joint_names:      ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "
 
 kp_push:          0.01                                  # Proportional gain for goal force regulation in the pushing task
 
-push_force_goal:  5.0                                   # Force goal to be regulated in the pushing task
+push_force_goal:  10.0                                  # Force goal to be regulated in the pushing task
 
 safe_push_dist:   0.15                                  # Safety distance for the force regulation in the pushing task
