@@ -83,7 +83,13 @@ AdmittanceControl::AdmittanceControl(const std::string& node_name)
     wf_pub_ = nh_.advertise<geometry_msgs::Wrench>(manipulator_name_+"/filtered_wrench",1);
 
     // Initialize low-pass filter for the wrench
-    force_filter_ = new filters::RCFilter(6, 100, 1/loop_rate_);
+    double force_cut_freq;
+    if (!nh_.getParam(node_name_+"/force_cut_freq", force_cut_freq))
+    {
+        ROS_WARN("Filter cut out frequency not set, using default: 100 Hz.");
+        loop_rate_ = 100.0;
+    }
+    force_filter_ = new filters::RCFilter(6, force_cut_freq, 1/loop_rate_);
 }
 
 // Node params update
