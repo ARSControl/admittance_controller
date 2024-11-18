@@ -1,0 +1,9 @@
+<launch>
+
+  <node name="admittance_control_node" pkg="admittance_controller"
+        type="admittance_control_node" output="screen" >
+
+    <rosparam file="$(find admittance_controller)/config/ur5e_adm_params.yaml"
+              command="load"/>
+  </node>
+</launch>
