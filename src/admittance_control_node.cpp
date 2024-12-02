@@ -1,7 +1,7 @@
 /*
 	MIT License
 
-	Copyright (c) [2024] [Andrea Pupa] [Italo Almirante]
+	Copyright (c) [2024] [Andrea Pupa] [Italo Almirante] [Matteo Nini]
 
 	Permission is hereby granted, free of charge, to any person obtaining a copy
 	of this software and associated documentation files (the "Software"), to deal
@@ -28,17 +28,24 @@
 // MAIN FUNCTION
 int main(int argc, char **argv)
 {
-	// Init the node name
-	std::string node_name = "admittance_control_node";
+    // Initialize ROS2
+    rclcpp::init(argc, argv);
 
-	// Initialize node
-	ros::init(argc, argv, node_name);
+    // Node name
+    std::string node_name = "admittance_control_node";
 
-  // Istantiate an object of the class AdmittanceControl
-	AdmittanceControl ac(node_name);
+    // Create a node using the rclcpp library
+    auto node = std::make_shared<AdmittanceControl>(node_name);
 
-	ac.spinner();
+    // Use the multi-threaded executor to spin the node
+    rclcpp::executors::MultiThreadedExecutor executor;
+    executor.add_node(node);
 
-	// File end
-	return 0;
+    // Spin the executor to process callbacks
+    executor.spin();
+
+    // Shutdown ROS2
+    rclcpp::shutdown();
+
+    return 0;
 }

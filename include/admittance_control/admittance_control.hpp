@@ -1,7 +1,7 @@
 /************************************************************************************
  * MIT License
  * 
- * Copyright (c) 2024 [Andrea Pupa] [Italo Almirante]
+ * Copyright (c) 2024 [Andrea Pupa] [Italo Almirante] [Matteo Nini]
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -25,18 +25,18 @@
 #ifndef ADMITTANCE_CONTROL_H
 #define ADMITTANCE_CONTROL_H
 
-#include <ros/ros.h>
-#include <std_msgs/Float64MultiArray.h>
-#include <geometry_msgs/Twist.h>
-#include <geometry_msgs/Wrench.h>
-#include <geometry_msgs/Pose.h>
-#include <sensor_msgs/JointState.h>
-#include <std_srvs/SetBool.h>
-#include <std_srvs/Trigger.h>
+#include "rclcpp/rclcpp.hpp"
+#include "std_msgs/Float64MultiArray.h>
+#include "geometry_msgs/msg/twist.hpp"
+#include "geometry_msgs/msg/wrench.hpp"
+#include "geometry_msgs/msg/pose.hpp"
+#include "sensor_msgs/msg/joint_state.hpp"
+#include "std_srvs/srv/set_bool.hpp"
+#include "std_srvs/srv/trigger.hpp"
 #include <Eigen/Dense>
 #include <signal.h>
-#include "admittance_controller/admittance_controller.h"
-#include <manipulator_kdl/manipulator_kdl.h>
+#include "admittance_controller/admittance_controller.hpp"
+#include "manipulator_kdl/manipulator_kdl.hpp"
 
 class AdmittanceControl
 {
