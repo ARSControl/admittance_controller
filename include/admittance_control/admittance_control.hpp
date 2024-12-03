@@ -26,14 +26,14 @@
 #define ADMITTANCE_CONTROL_H
 
 #include "rclcpp/rclcpp.hpp"
-#include "std_msgs/Float64MultiArray.h>
+#include "example_interfaces/msg/float64_multi_array.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/wrench.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "std_srvs/srv/set_bool.hpp"
 #include "std_srvs/srv/trigger.hpp"
-#include <Eigen/Dense>
+#include <eigen3/Eigen/Eigen>
 #include <signal.h>
 #include "admittance_controller/admittance_controller.hpp"
 #include "manipulator_kdl/manipulator_kdl.hpp"

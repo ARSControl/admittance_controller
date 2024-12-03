@@ -22,7 +22,7 @@
  * SOFTWARE.
  ************************************************************************************/
 
-#include "admittance_controller/admittance_controller.h"
+#include "admittance_controller/admittance_controller.hpp"
 
 // Constructor for the AdmittanceController class
 AdmittanceController::AdmittanceController(const Eigen::Matrix<double, 6, 6> &Mdes,

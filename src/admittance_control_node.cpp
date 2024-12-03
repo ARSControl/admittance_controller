@@ -23,7 +23,7 @@
 */
 
 // IMPORT LIBRARIES
-#include "admittance_control/admittance_control.h"
+#include "admittance_control/admittance_control.hpp"
 
 // MAIN FUNCTION
 int main(int argc, char **argv)

@@ -25,7 +25,7 @@
 #ifndef ADMITTANCE_CONTROLLER_H
 #define ADMITTANCE_CONTROLLER_H
 
-#include <Eigen/Dense>
+#include <eigen3/Eigen/Eigen>
 #include <vector>
 #include "filters/RCFilter.h"
 #include "geometry_msgs/Vector3.h"

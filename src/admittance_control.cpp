@@ -56,23 +56,23 @@ AdmittanceControl::AdmittanceControl(const std::string& node_name)
 
     
     // Subscribers to change admittance
-    m_adm_pos_sub_ = this->create_subscription<std_msgs::msg::Float64MultiArray>(
+    m_adm_pos_sub_ = this->create_subscription<geometry_msgs::Vector3>(
         manipulator_name_ + "/m_adm_pos", 1, std::bind(&AdmittanceControl::changeMassAdmittanceCallback, this, std::placeholders::_1));
-    b_adm_pos_sub_ = this->create_subscription<std_msgs::msg::Float64MultiArray>(
+    b_adm_pos_sub_ = this->create_subscription<geometry_msgs::Vector3>(
         manipulator_name_ + "/b_adm_pos", 1, std::bind(&AdmittanceControl::changeDampAdmittanceCallback, this, std::placeholders::_1));
-    k_adm_pos_sub_ = this->create_subscription<std_msgs::msg::Float64MultiArray>(
+    k_adm_pos_sub_ = this->create_subscription<geometry_msgs::Vector3>(
         manipulator_name_ + "/k_adm_pos", 1, std::bind(&AdmittanceControl::changeStiffAdmittanceCallback, this, std::placeholders::_1));
-    m_adm_rot_sub_ = this->create_subscription<std_msgs::msg::Float64MultiArray>(
+    m_adm_rot_sub_ = this->create_subscription<geometry_msgs::Vector3>(
         manipulator_name_ + "/m_adm_rot", 1, std::bind(&AdmittanceControl::changeMassRotAdmittanceCallback, this, std::placeholders::_1));
-    b_adm_rot_sub_ = this->create_subscription<std_msgs::msg::Float64MultiArray>(
+    b_adm_rot_sub_ = this->create_subscription<geometry_msgs::Vector3>(
         manipulator_name_ + "/b_adm_rot", 1, std::bind(&AdmittanceControl::changeDampRotAdmittanceCallback, this, std::placeholders::_1));
-    k_adm_rot_sub_ = this->create_subscription<std_msgs::msg::Float64MultiArray>(
+    k_adm_rot_sub_ = this->create_subscription<geometry_msgs::Vector3>(
         manipulator_name_ + "/k_adm_rot", 1, std::bind(&AdmittanceControl::changeStiffRotAdmittanceCallback, this, std::placeholders::_1));
 
 
     // Load and apply parameters
     if (mode_ == "kdl") {
-        vel_pub_ = this->create_publisher<std_msgs::msg::Float64MultiArray>(command_topic_, 1);
+        vel_pub_ = this->create_publisher<example_interfaces::msg::Float64MultiArray>(command_topic_, 1);
     } else {
         vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(command_topic_, 1);
     }
