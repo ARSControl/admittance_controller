@@ -27,8 +27,8 @@
 
 #include <eigen3/Eigen/Eigen>
 #include <vector>
-#include "filters/RCFilter.h"
-#include "geometry_msgs/Vector3.h"
+#include "filters/RCFilter.hpp"
+#include "geometry_msgs/msg/vector3.hpp"
 
 class AdmittanceController
 {

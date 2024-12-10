@@ -17,6 +17,7 @@ endif()
 ################## INCLUDE CMAKE FILES #####################
 ############################################################
 
+
 ############################################################
 ################## FIND PACKAGES ###########################
 ############################################################
@@ -25,96 +26,92 @@ find_package(filters REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(geometry_msgs REQUIRED)
-find_package(example_interfaces REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(manipulator_kdl REQUIRED)
 
 ############################################################
 ################## SET INCLUDE PATH ########################
 ############################################################
 # Include directories
-include_directories($(CCD_INCLUDE_DIRS))
-include_directories($(CMAKE_CURRENT_SOURCE_DIR)/include)
-include_directories("${CMAKE_CURRENT_BINARY_DIR}")
-include_directories(/include)
+include_directories(
+  include
+  ${EIGEN3_INCLUDE_DIRS}
+  ${manipulator_kdl_INCLUDE_DIRS}
+)
+
 
 ############################################################
-################## SET LIBRARIES PATH ######################
+################## LIBRARIES ##########################
 ############################################################
-# link directory e.g. link_directories( usr/lib/x86_64-linux-gnu )
+add_library(admittance_controller SHARED src/admittance_controller.cpp)
+ament_target_dependencies(admittance_controller rclcpp std_msgs geometry_msgs filters Eigen3 std_srvs)
 
-############################################################
-################## LINK LIBRARIES ##########################
-############################################################
-# link libraries e.g. link_libraries(${ExtPkg_LIBS})
+add_library(admittance_control SHARED src/admittance_control.cpp)
+ament_target_dependencies(admittance_control rclcpp std_msgs manipulator_kdl filters Eigen3 std_srvs)
+target_link_libraries(admittance_control admittance_controller)
+
 
 ############################################################
 ################## EXECUTABLES #############################
 ############################################################
-
-### admittance_controller library 
-add_executable(
-  admittance_controller src/admittance_controller.cpp
-  include/admittance_controller/admittance_controller.hpp
-)
-ament_target_dependencies( admittance_controller rclcpp filters std_msgs geometry_msgs )
-target_include_directories( admittance_controller PUBLIC 
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>  
-)
-target_link_libraries( admittance_controller fcl ${CDD_LIBRARIES} )
-target_compile_features( admittance_controller PUBLIC c_std_99 cxx_std_17 )
-
-### admittance_control library 
-add_executable(
-  admittance_control src/admittance_control.cpp
-  include/admittance_control/admittance_control.hpp
-)
-ament_target_dependencies( admittance_control rclcpp std_msgs geometry_msgs sensor_msgs )
-target_include_directories( admittance_control PUBLIC 
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>  
-)
-target_link_libraries( admittance_control fcl ${CDD_LIBRARIES} )
-target_compile_features( admittance_control PUBLIC c_std_99 cxx_std_17 )
-
-### admittance_control_node library 
-add_executable(
-  admittance_control_node src/admittance_control_node.cpp
-  include/admittance_control/admittance_control.hpp
-)
-ament_target_dependencies( admittance_control_node rclcpp geometry_msgs )
-target_include_directories( admittance_control_node PUBLIC 
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>  
-)
-target_link_libraries( admittance_control_node fcl ${CDD_LIBRARIES} )
-target_compile_features( admittance_control_node PUBLIC c_std_99 cxx_std_17 )
+add_executable(admittance_control_node src/admittance_control_node.cpp)
+ament_target_dependencies(admittance_control_node rclcpp std_msgs manipulator_kdl filters Eigen3)
+target_link_libraries(admittance_control_node admittance_control)
 
 
 ############################################################
 ################## INSTALLING ##############################
 ############################################################
-# install nodes
+# Install targets
 install(
-  TARGETS
-    admittance_controller
-    admittance_control
+  TARGETS 
     admittance_control_node
-  DESTINATION
+  DESTINATION 
     lib/${PROJECT_NAME}
 )
 
-# install launch and/or config files in share path of package
+install(
+  TARGETS 
+    admittance_controller
+  EXPORT export_admittance_controller
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+  INCLUDES DESTINATION include
+)
+
+install(
+  TARGETS 
+    admittance_control 
+  EXPORT export_admittance_control
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+  INCLUDES DESTINATION include
+)
+
 install(
   DIRECTORY
     launch
     config
-  DESTINATION
+  DESTINATION 
     share/${PROJECT_NAME}
 )
 
+install(
+  DIRECTORY 
+    include/
+  DESTINATION
+    include
+)
+
+# Export package dependencies
+ament_export_libraries(admittance_controller admittance_control)
+ament_export_include_directories(include)
+ament_export_dependencies(rclcpp std_msgs manipulator_kdl filters Eigen3)
 
 ############################################################
 ################## INTERFACES ##############################
@@ -130,10 +127,8 @@ install(
 #   ${PROJECT_NAME} rosidl_typesupport_cpp
 # )
 
-target_link_libraries( admittance_controller "${cpp_typesupport_target}" )
-target_link_libraries( admittance_control "${cpp_typesupport_target}" )
-target_link_libraries( admittance_control_node "${cpp_typesupport_target}" )
-
+target_link_libraries(admittance_controller "${cpp_typesupport_target}")
+target_link_libraries(admittance_control "${cpp_typesupport_target}")
 
 ############################################################
 ################## BUILD TESTING ###########################
