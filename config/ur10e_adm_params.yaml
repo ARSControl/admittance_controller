@@ -1,46 +1,48 @@
 # Parameters for the admittance control
-manipulator:      "ur10e"                                # Robot name
+admittance_control_node:
+  ros__parameters:
+    manipulator:      "ur10e"                                # Robot name
 
-manipulator_name: "manipulator"                         # Robot planner group name
+    manipulator_name: "manipulator"                         # Robot planner group name
 
-m_d:              [5.0,   5.0,   5.0,  0.1,  0.1,  0.1] # Diagonal mass    coefficients (kg)
+    m_d:              [5.0,   5.0,   5.0,  0.1,  0.1,  0.1] # Diagonal mass    coefficients (kg)
 
-k_d:              [50.0,  50.0, 50.0,  1.0,  1.0,  1.0] # Diagonal spring  coefficients (N/m)
+    k_d:              [50.0,  50.0, 50.0,  1.0,  1.0,  1.0] # Diagonal spring  coefficients (N/m)
 
-b_d:              [25.0,  25.0, 25.0,  0.5,  0.5,  0.5] # Diagonal damping coefficients (Ns/m)
+    b_d:              [25.0,  25.0, 25.0,  0.5,  0.5,  0.5] # Diagonal damping coefficients (Ns/m)
 
-loop_rate:        500.0                                 # Hz
+    loop_rate:        500.0                                 # Hz
 
-dz_force:         5.0                                   # force  dead zone
+    dz_force:         5.0                                   # force  dead zone
 
-dz_torque:        1.0                                   # torque dead zone
+    dz_torque:        1.0                                   # torque dead zone
 
-force_limit:      [30.0, 30.0, 30.0, 2.0, 2.0, 2.0]     # Force limits (Fx, Fy, Fz, Tx, Ty, Tz)
+    force_limit:      [30.0, 30.0, 30.0, 2.0, 2.0, 2.0]     # Force limits (Fx, Fy, Fz, Tx, Ty, Tz)
 
-force_cut_freq:   100                                   # cut out frequence for wrench RC filter
+    force_cut_freq:   100.0                                 # cut out frequence for wrench RC filter
 
-kp_pos:           0.0                                   # kp for position compensation
+    kp_pos:           0.0                                   # kp for position compensation
 
-kp_rot:           0.0                                   # kp for rotation compensation
+    kp_rot:           0.0                                   # kp for rotation compensation
 
-mode:             "moveit"                              # Planner of the moves, default "kdl" or "moveit"
+    mode:             "moveit"                              # Planner of the moves, default "kdl" or "moveit"
 
-command_topic:    "manipulator/cmd_vel"                 # vel command to the manipulator's ee, default
-                                                        # "/ur_rtde/controllers/joint_velocity_controller/command" or "manipulator/cmd_vel" 
+    command_topic:    "manipulator/cmd_vel"                 # vel command to the manipulator's ee, default
+                                                            # "/ur_rtde/controllers/joint_velocity_controller/command" or "manipulator/cmd_vel" 
 
-force_feed_topic: "/ur_rtde/ft_sensor"                  # force sensor reading topic, default "/ur_rtde/ft_sensor"
+    force_feed_topic: "/ur_rtde/ft_sensor"                  # force sensor reading topic, default "/ur_rtde/ft_sensor"
 
-zero_ft_topic:    "/ur_rtde/zeroFTSensor"               # server to reset the force/torque sensor, default
-                                                        # "/ur_rtde/zeroFTSensor"
+    zero_ft_topic:    "/ur_rtde/zeroFTSensor"               # server to reset the force/torque sensor, default
+                                                            # "/ur_rtde/zeroFTSensor"
 
-ee_pose_topic:    "/manipulator/tcp_pose"               # topic to read tcp pose, default "/ur_rtde/cartesian_pose" or "/manipulator/tcp_pose" 
+    ee_pose_topic:    "/manipulator/tcp_pose"               # topic to read tcp pose, default "/ur_rtde/cartesian_pose" or "/manipulator/tcp_pose" 
 
-ee_vel_topic:     "/manipulator/cmd_vel"                # topic to read tcp vel,  default "/manipulator/tcp_vel"    or "/manipulator/cmd_vel"
+    ee_vel_topic:     "/manipulator/cmd_vel"                # topic to read tcp vel,  default "/manipulator/tcp_vel"    or "/manipulator/cmd_vel"
 
-joint_names:      ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]
+    joint_names:      ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]
 
-kp_push:          0.001                                 # Proportional gain for goal force regulation in the pushing task
+    kp_push:          0.001                                 # Proportional gain for goal force regulation in the pushing task
 
-push_force_goal:  8.0                                   # Force goal to be regulated in the pushing task
+    push_force_goal:  8.0                                   # Force goal to be regulated in the pushing task
 
-safe_push_dist:   0.15                                  # Safety distance for the force regulation in the pushing task
+    safe_push_dist:   0.15                                  # Safety distance for the force regulation in the pushing task

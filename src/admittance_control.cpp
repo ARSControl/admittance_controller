@@ -484,21 +484,27 @@ bool AdmittanceControl::enableAdmittance(const std::shared_ptr<std_srvs::srv::Se
 
         // Trigger the service to zero the force-torque sensor
         auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
-        auto future = ft_client_->async_send_request(request);
-
-        // Wait for the response (optional, depends on your application)
-        try
-        {
-            auto response = future.get();
-            if (!response->success)
+        ft_client_->async_send_request(
+            request,
+            [this](rclcpp::Client<std_srvs::srv::Trigger>::SharedFuture future)
             {
-                RCLCPP_WARN(this->get_logger(), "Force-torque sensor zeroing service failed.");
-            }
-        }
-        catch (const std::exception& e)
-        {
-            RCLCPP_ERROR(this->get_logger(), "Service call failed: %s", e.what());
-        }
+                try
+                {
+                    auto response = future.get();
+                    if (!response->success)
+                    {
+                        RCLCPP_WARN(this->get_logger(), "Force-torque sensor zeroing service failed.");
+                    }
+                    else
+                    {
+                        RCLCPP_INFO(this->get_logger(), "Force-torque sensor zeroing service succeeded.");
+                    }
+                }
+                catch (const std::exception &e)
+                {
+                    RCLCPP_ERROR(this->get_logger(), "Service call failed: %s", e.what());
+                }
+            });
     }
     else
     {

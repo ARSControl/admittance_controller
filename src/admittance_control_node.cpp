@@ -37,15 +37,17 @@ int main(int argc, char **argv)
     // Create a node using the rclcpp library
     auto node = std::make_shared<AdmittanceControl>(node_name);
 
+	node->spinner();
+
     // Use the multi-threaded executor to spin the node
-    rclcpp::executors::MultiThreadedExecutor executor;
-    executor.add_node(node);
+    // rclcpp::executors::MultiThreadedExecutor executor;
+    // executor.add_node(node);
 
-    // Spin the executor to process callbacks
-    executor.spin();
+    // // Spin the executor to process callbacks
+    // executor.spin();
 
-    // Shutdown ROS2
-    rclcpp::shutdown();
+    // // Shutdown ROS2
+    // rclcpp::shutdown();
 
     return 0;
 }
