@@ -41,3 +41,8 @@ add_dependencies(admittance_control ${catkin_EXPORTED_TARGETS})
 add_executable(admittance_control_node src/admittance_control_node.cpp)
 target_link_libraries(admittance_control_node ${catkin_LIBRARIES} admittance_control)
 add_dependencies(admittance_control_node ${catkin_EXPORTED_TARGETS})
+
+# Build the node
+add_executable(simod_test1 src/simod_test1.cpp)
+target_link_libraries(simod_test1 ${catkin_LIBRARIES})
+add_dependencies(simod_test1 ${catkin_EXPORTED_TARGETS})
