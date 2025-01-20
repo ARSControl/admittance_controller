@@ -47,7 +47,7 @@ AdmittanceController::AdmittanceController(const Eigen::Matrix<double, 6, 6> &Md
     changeInternalP(kp_pos,kp_rot);
 
     // Initialize low-pass filter for acceleration
-    ddx_filter_ = new filters::RCFilter(6, 30, ts_);
+    ddx_filter_ = new filters::RCFilter(6, 100, ts_);   // TODO: freq param setting
 
     // Initialize admittance control parameters
     admittance_active_  = false;
