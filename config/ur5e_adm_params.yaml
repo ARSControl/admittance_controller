@@ -44,16 +44,3 @@ admittance_control_node:
     push_force_goal:  8.0                                    # Force goal to be regulated in the pushing task
 
     safe_push_dist:   0.15                                   # Safety distance for the force regulation in the pushing task
-
-
-energy_tank_node:
-  ros__parameters:
-    t_sgn:            5.0
-    delta_scalar:     0.1
-    t_en_start:       1.0
-    cart_max_vel:     [ 1.75, 1.75, 1.75, 5.0, 5.0, 5.0 ]
-
-    inertia_start:    [  5.0,  5.0,  5.0, 0.1, 0.1, 0.1 ]
-    damping_start:    [ 25.0, 25.0, 25.0, 0.5, 0.5, 0.5 ]
-    weights:          [ 0.167, 0.167, 0.167, 0.167, 0.167, 0.167 ]
-    delta_m:          [ 1.5, 1.5, 1.5, 0.15, 0.15, 0.15]

@@ -10,13 +10,13 @@ This library provides the interface between the robot model and a custom admitta
 
 ### Installation
 
-Prerequisites: UBUNTU 20.04 - ROS NOETICS. It's also adviced to create a ssh key to your GitHub account. 
+Prerequisites: UBUNTU 22.04 - ROS HUMBLE. It's also adviced to create a ssh key to your GitHub account. 
 
-Firstly, setup your personal catkin workspace. You can manually create it from scratch as follows:
+Firstly, setup your personal colcon workspace. You can manually create it from scratch as follows:
 
-    mkdir -p your_catkin_ws/src
-    cd catkin_ws
-    catkin build
+    mkdir -p your_colcon_ws/src
+    cd colcon_ws
+    colcon build
 
 Secondly, setup the following dependencies (it's suggested to follow the installation instructions of their repository to avoid any issue):
 
@@ -34,12 +34,8 @@ To interface the repo with the manipulator planner, copy the following command t
 
 Compile the repo:
 
-    cd your_catkin_ws
-    catkin build
-
-Alternatively, you can compile using the command
-
-    catkin_make (or catkin_make_isolated)
+    cd your_colcon_ws
+    colcon build
 
 ## How to use
 
@@ -47,15 +43,15 @@ Use the file "admittance_control_params.yaml" to setup the configuration of your
 
 The main executable node is "admittance_control_node". To automatically launch it, with your custom configuration, run the following command on the terminal:
 
-    roslaunch admittance_controller admittance_control.launch
+    ros2 launch admittance_controller admittance_control.launch
 
 If you want to interface the robot with the library "manipulator_kdl", launch the command (as ur5e example):
 
-    roslaunch manipulator_kdl manipulator_kdl.launch robot_name:=ur5
+    ros2 launch manipulator_kdl manipulator_kdl.launch robot_name:=ur5
 
 If you want to interface the robot with MoveIt!, launch the command (as ur5e example):
 
-    roslaunch manipulators ur5e_planner.launch
+    ros2 launch manipulators ur5e_planner.launch
 
 ### Optimized compiler
 

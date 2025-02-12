@@ -31,84 +31,78 @@ double AdmittanceControl::mean = 0.0;  // variable for the control time average 
 AdmittanceControl::AdmittanceControl(const std::string& node_name) : rclcpp::Node(node_name)
 {
     // Initialize wrench to zero
-    wrench_      = Eigen::VectorXd::Zero(6);
-    force_limit_ = Eigen::VectorXd::Zero(6);
+    this->wrench_      = Eigen::VectorXd::Zero(6);
+    this->force_limit_ = Eigen::VectorXd::Zero(6);
 
     // Initialize state vectors
-    ee_pose_ = Eigen::VectorXd::Zero(7);    // 7 for position + quaternion
-    xd_      = Eigen::VectorXd::Zero(7);    // 7 for position + quaternion
-    dx_      = Eigen::VectorXd::Zero(6);    // 6 for linear and angular velocity
-    dx_des_  = Eigen::VectorXd::Zero(6);    // 6 for linear and angular velocity
-    ddx_des_ = Eigen::VectorXd::Zero(6);    // 6 for linear and angular velocity
+    this->ee_pose_ = Eigen::VectorXd::Zero(7);    // 7 for position + quaternion
+    this->xd_      = Eigen::VectorXd::Zero(7);    // 7 for position + quaternion
+    this->dx_      = Eigen::VectorXd::Zero(6);    // 6 for linear and angular velocity
+    this->dx_des_  = Eigen::VectorXd::Zero(6);    // 6 for linear and angular velocity
+    this->ddx_des_ = Eigen::VectorXd::Zero(6);    // 6 for linear and angular velocity
 
     // Update node params
     check_params();
     RCLCPP_INFO(this->get_logger(), "Params and attributes for admittance control are correctly initialized.");
 
     // Subscribe to topics
-    joint_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(
+    this->joint_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(
         "/joint_states", 1, std::bind(&AdmittanceControl::jointCallback, this, std::placeholders::_1));
-    force_sub_ = this->create_subscription<geometry_msgs::msg::Wrench>(
-        force_feed_topic_, 1, std::bind(&AdmittanceControl::forceSensorCallback, this, std::placeholders::_1));
-    xd_sub_ = this->create_subscription<geometry_msgs::msg::Pose>(
-        manipulator_name_ + "/adm_xd", 1, std::bind(&AdmittanceControl::admittanceXdCallback, this, std::placeholders::_1));
+    this->force_sub_ = this->create_subscription<geometry_msgs::msg::Wrench>(
+        this->force_feed_topic_, 1, std::bind(&AdmittanceControl::forceSensorCallback, this, std::placeholders::_1));
+    this->xd_sub_ = this->create_subscription<geometry_msgs::msg::Pose>(
+        this->manipulator_name_ + "/adm_xd", 1, std::bind(&AdmittanceControl::admittanceXdCallback, this, std::placeholders::_1));
 
     
     // Subscribers to change admittance
-    m_adm_pos_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(
-        manipulator_name_ + "/m_adm_pos", 1, std::bind(&AdmittanceControl::changeMassAdmittanceCallback, this, std::placeholders::_1));
-    b_adm_pos_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(
-        manipulator_name_ + "/b_adm_pos", 1, std::bind(&AdmittanceControl::changeDampAdmittanceCallback, this, std::placeholders::_1));
-    k_adm_pos_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(
-        manipulator_name_ + "/k_adm_pos", 1, std::bind(&AdmittanceControl::changeStiffAdmittanceCallback, this, std::placeholders::_1));
-    m_adm_rot_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(
-        manipulator_name_ + "/m_adm_rot", 1, std::bind(&AdmittanceControl::changeMassRotAdmittanceCallback, this, std::placeholders::_1));
-    b_adm_rot_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(
-        manipulator_name_ + "/b_adm_rot", 1, std::bind(&AdmittanceControl::changeDampRotAdmittanceCallback, this, std::placeholders::_1));
-    k_adm_rot_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(
-        manipulator_name_ + "/k_adm_rot", 1, std::bind(&AdmittanceControl::changeStiffRotAdmittanceCallback, this, std::placeholders::_1));
+    this->m_adm_pos_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(
+        this->manipulator_name_ + "/m_adm_pos", 1, std::bind(&AdmittanceControl::changeMassAdmittanceCallback, this, std::placeholders::_1));
+    this->b_adm_pos_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(
+        this->manipulator_name_ + "/b_adm_pos", 1, std::bind(&AdmittanceControl::changeDampAdmittanceCallback, this, std::placeholders::_1));
+    this->k_adm_pos_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(
+        this->manipulator_name_ + "/k_adm_pos", 1, std::bind(&AdmittanceControl::changeStiffAdmittanceCallback, this, std::placeholders::_1));
+    this->m_adm_rot_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(
+        this->manipulator_name_ + "/m_adm_rot", 1, std::bind(&AdmittanceControl::changeMassRotAdmittanceCallback, this, std::placeholders::_1));
+    this->b_adm_rot_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(
+        this->manipulator_name_ + "/b_adm_rot", 1, std::bind(&AdmittanceControl::changeDampRotAdmittanceCallback, this, std::placeholders::_1));
+    this->k_adm_rot_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(
+        this->manipulator_name_ + "/k_adm_rot", 1, std::bind(&AdmittanceControl::changeStiffRotAdmittanceCallback, this, std::placeholders::_1));
 
 
     // Load and apply parameters
-    if (mode_ == "kdl") {
-        vel_pub_ = this->create_publisher<std_msgs::msg::Float64MultiArray>(command_topic_, 1);
+    if (this->mode_ == "kdl") {
+        this->vel_pub_ = this->create_publisher<std_msgs::msg::Float64MultiArray>(this->command_topic_, 1);
     } else {
-        vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(command_topic_, 1);
+        this->vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(this->command_topic_, 1);
     }
 
-    tcp_pose_sub_ = this->create_subscription<geometry_msgs::msg::Pose>(
-        ee_pose_topic_, 1, std::bind(&AdmittanceControl::tcpPoseCallback, this, std::placeholders::_1));
-    tcp_twist_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
-        ee_vel_topic_, 1, std::bind(&AdmittanceControl::tcpTwistCallback, this, std::placeholders::_1));
+    this->tcp_pose_sub_ = this->create_subscription<geometry_msgs::msg::Pose>(
+        this->ee_pose_topic_, 1, std::bind(&AdmittanceControl::tcpPoseCallback, this, std::placeholders::_1));
+    this->tcp_twist_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(
+        this->ee_vel_topic_, 1, std::bind(&AdmittanceControl::tcpTwistCallback, this, std::placeholders::_1));
 
 
     // Advertise service to enable admittance control
-    adm_service_ = this->create_service<std_srvs::srv::SetBool>(
-        manipulator_name_ + "/enable_admittance", std::bind(&AdmittanceControl::enableAdmittance, this, std::placeholders::_1, std::placeholders::_2));
-    push_service_ = this->create_service<std_srvs::srv::SetBool>(
-        manipulator_name_ + "/enable_push_regulation", std::bind(&AdmittanceControl::enablePushRegulation, this, std::placeholders::_1, std::placeholders::_2));
+    this->adm_service_ = this->create_service<std_srvs::srv::SetBool>(
+        this->manipulator_name_ + "/enable_admittance", std::bind(&AdmittanceControl::enableAdmittance, this, std::placeholders::_1, std::placeholders::_2));
+    this->push_service_ = this->create_service<std_srvs::srv::SetBool>(
+        this->manipulator_name_ + "/enable_push_regulation", std::bind(&AdmittanceControl::enablePushRegulation, this, std::placeholders::_1, std::placeholders::_2));
 
     // Create service client to zero the force-torque sensor
-    ft_client_ = this->create_client<std_srvs::srv::Trigger>(zero_ft_sensor_topic_);
+    ft_client_ = this->create_client<std_srvs::srv::Trigger>(this->zero_ft_sensor_topic_);
 
     // Create a publisher to show the filtered msh
     wf_pub_ = this->create_publisher<geometry_msgs::msg::Wrench>(manipulator_name_ + "/filtered_wrench", 1);
 
     // Initialize low-pass filter for the wrench
-    double force_cut_freq;
-    if (!this->has_parameter("force_cut_freq")) {
-        RCLCPP_WARN(this->get_logger(), "Filter cut-out frequency not set, using default: 100 Hz.");
-        this->declare_parameter<double>("force_cut_freq", 100.0);
-    }
-    force_cut_freq = this->get_parameter("force_cut_freq").as_double();
-    force_filter_ = std::make_shared<filters::RCFilter>(6, force_cut_freq, 1 / loop_rate_);
+    force_filter_ = std::make_shared<filters::RCFilter>(6, this->force_cut_freq_, 1 / this->loop_rate_);
 }
 
 // Node params update
 void AdmittanceControl::check_params()
 {
-    //TODO: Controllare che this->get_parameter non vada in errore se non è settata la proprietà nel file di configurazione ma che ignori
     // Init joints
+    this->declare_parameter("joint_names", rclcpp::PARAMETER_STRING_ARRAY);
     if (!this->has_parameter("joint_names")) {
         RCLCPP_WARN(this->get_logger(), "Joint names not set, using default names.");
         this->declare_parameter<std::vector<std::string>>("joint_names", {"shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"});
@@ -118,6 +112,9 @@ void AdmittanceControl::check_params()
     q_ = Eigen::VectorXd::Zero(n_joints_);
 
     // Init motion params
+    this->declare_parameter("m_d", rclcpp::PARAMETER_DOUBLE_ARRAY);
+    this->declare_parameter("k_d", rclcpp::PARAMETER_DOUBLE_ARRAY);
+    this->declare_parameter("b_d", rclcpp::PARAMETER_DOUBLE_ARRAY);
     if (!this->has_parameter("m_d")) {
         RCLCPP_WARN(this->get_logger(), "Diagonal mass 'm_d' not set, using default value of 1.0.");
         this->declare_parameter<std::vector<double>>("m_d", {1., 1., 1., 1., 1., 1.});
@@ -135,6 +132,10 @@ void AdmittanceControl::check_params()
     std::vector<double> b_d = this->get_parameter("b_d").as_double_array();
 
     // Admittance params
+    this->declare_parameter("dz_force", rclcpp::PARAMETER_DOUBLE);
+    this->declare_parameter("dz_torque", rclcpp::PARAMETER_DOUBLE);
+    this->declare_parameter("kp_pos", rclcpp::PARAMETER_DOUBLE);
+    this->declare_parameter("kp_rot", rclcpp::PARAMETER_DOUBLE);
     if (!this->has_parameter("dz_force")) {
         RCLCPP_WARN(this->get_logger(), "Force dead zone not set, using default: 5 N.");
         this->declare_parameter<double>("dz_force", 5.0);
@@ -157,6 +158,7 @@ void AdmittanceControl::check_params()
     kp_rot_    = this->get_parameter("kp_rot").as_double();
 
     // Init interaction params
+    this->declare_parameter("force_limit", rclcpp::PARAMETER_DOUBLE_ARRAY);
     if (!this->has_parameter("force_limit")) {
         RCLCPP_WARN(this->get_logger(), "Force limit not set, using default values.");
         this->declare_parameter<std::vector<double>>("force_limit", {1.0, 1.0, 1.0, 0.5, 0.5, 0.5});
@@ -165,6 +167,7 @@ void AdmittanceControl::check_params()
     for (unsigned int k = 0; k < 6; k++) {
         force_limit_(k) = force_limit_vec[k];
     }
+    this->declare_parameter("mode", rclcpp::PARAMETER_STRING);
     if (!this->has_parameter("mode")) {
         RCLCPP_WARN(this->get_logger(), "Mode param not set, using default: kdl.");
         this->declare_parameter<std::string>("mode", "kdl");
@@ -173,6 +176,7 @@ void AdmittanceControl::check_params()
     mode_bool_ = (mode_ != "kdl");
 
     // Init control params
+    this->declare_parameter("loop_rate", rclcpp::PARAMETER_DOUBLE);
     if (!this->has_parameter("loop_rate")) {
         RCLCPP_WARN(this->get_logger(), "Loop rate not set, using default: 500 Hz.");
         this->declare_parameter<double>("loop_rate", 500.0);
@@ -180,10 +184,12 @@ void AdmittanceControl::check_params()
     loop_rate_ = this->get_parameter("loop_rate").as_double();
 
     // Init model params
+    this->declare_parameter("manipulator", rclcpp::PARAMETER_STRING);
     if (!this->has_parameter("manipulator")) {
         RCLCPP_WARN(this->get_logger(), "Manipulator name not set, using default: ur5.");
         this->declare_parameter<std::string>("manipulator", "ur5");
     }
+    this->declare_parameter("manipulator_name", rclcpp::PARAMETER_STRING);
     if (!this->has_parameter("manipulator_name")) {
         RCLCPP_WARN(this->get_logger(), "Manipulator name not set, using default: manipulator.");
         this->declare_parameter<std::string>("manipulator_name", "manipulator");
@@ -192,6 +198,7 @@ void AdmittanceControl::check_params()
     manipulator_name_ = this->get_parameter("manipulator_name").as_string();
 
     // Init command topic
+    this->declare_parameter("command_topic", rclcpp::PARAMETER_STRING);
     if (!this->has_parameter("command_topic")) {
         RCLCPP_WARN(this->get_logger(), "Command topic param not set, using default: /ur_rtde/controllers/joint_velocity_controller/command.");
         this->declare_parameter<std::string>("command_topic", "/ur_rtde/controllers/joint_velocity_controller/command");
@@ -199,6 +206,7 @@ void AdmittanceControl::check_params()
     command_topic_ = this->get_parameter("command_topic").as_string();
 
     // Init force feedback topic
+    this->declare_parameter("force_feed_topic", rclcpp::PARAMETER_STRING);
     if (!this->has_parameter("force_feed_topic")) {
         RCLCPP_WARN(this->get_logger(), "Force feedback topic param not set, using default: /ur_rtde/ft_sensor.");
         this->declare_parameter<std::string>("force_feed_topic", "/ur_rtde/ft_sensor");
@@ -206,25 +214,39 @@ void AdmittanceControl::check_params()
     force_feed_topic_ = this->get_parameter("force_feed_topic").as_string();
 
     // Zero force feed zero server
+    this->declare_parameter("zero_ft_topic", rclcpp::PARAMETER_STRING);
     if (!this->has_parameter("zero_ft_topic")) {
         RCLCPP_WARN(this->get_logger(), "Zero force feedback server name param not set, using default: /ur_rtde/zeroFTSensor.");
         this->declare_parameter<std::string>("zero_ft_topic", "/ur_rtde/zeroFTSensor");
     }
     zero_ft_sensor_topic_ = this->get_parameter("zero_ft_topic").as_string();
     // Init pose feedback topic
+    this->declare_parameter("ee_pose_topic", rclcpp::PARAMETER_STRING);
     if (!this->has_parameter("ee_pose_topic")) {
         RCLCPP_WARN(this->get_logger(), "EE pose topic param not set, using default: /ur_rtde/cartesian_pose.");
         this->declare_parameter<std::string>("ee_pose_topic", "/ur_rtde/cartesian_pose");
     }
     ee_pose_topic_ = this->get_parameter("ee_pose_topic").as_string();
     // Init vel feedback topic
+    this->declare_parameter("ee_vel_topic", rclcpp::PARAMETER_STRING);
     if (!this->has_parameter("ee_vel_topic")) {
         RCLCPP_WARN(this->get_logger(), "EE velocity feedback topic param not set, using default: /manipulator/tcp_vel.");
         this->declare_parameter<std::string>("ee_vel_topic", "/manipulator/tcp_vel");
     }
     ee_vel_topic_ = this->get_parameter("ee_vel_topic").as_string();
 
+    // Initialize low-pass filter for the wrench
+    this->declare_parameter("force_cut_freq", rclcpp::PARAMETER_DOUBLE);
+    if (!this->has_parameter("force_cut_freq")) {
+        RCLCPP_WARN(this->get_logger(), "Filter cut-out frequency not set, using default: 100 Hz.");
+        this->declare_parameter<double>("force_cut_freq", 100.0);
+    }
+    this->force_cut_freq_ = this->get_parameter("force_cut_freq").as_double();
+
     // Init pushing interaction params
+    this->declare_parameter("kp_push", rclcpp::PARAMETER_DOUBLE);
+    this->declare_parameter("push_force_goal", rclcpp::PARAMETER_DOUBLE);
+    this->declare_parameter("safe_push_dist", rclcpp::PARAMETER_DOUBLE);
     if (!this->has_parameter("kp_push")) {
         RCLCPP_WARN(this->get_logger(), "Proportional gain for pushing task not set, using default: 0.01.");
         this->declare_parameter<double>("kp_push", 0.1);

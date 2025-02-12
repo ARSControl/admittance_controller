@@ -110,7 +110,7 @@ private:
     // Topics and other parameters
     std::string command_topic_, force_feed_topic_, zero_ft_sensor_topic_, ee_pose_topic_, ee_vel_topic_;
 	std::string manipulator_name_, manipulator_;
-    double loop_rate_;
+    double loop_rate_, force_cut_freq_;
     int    n_joints_;
     std::vector<std::string> joint_names_;
     
