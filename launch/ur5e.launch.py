@@ -39,31 +39,31 @@ def generate_launch_description():
             output = 'screen'
         ),
 
-        # Node(
-        #     package = 'energy_tank',
-        #     name = 'energy_tank_node',
-        #     executable = 'energy_tank_node',
-        #     parameters = [config_energy_tank],
-        #     remappings = [],
-        #     output = 'screen'
-        # ),
+        Node(
+            package = 'energy_tank',
+            name = 'energy_tank_node',
+            executable = 'energy_tank_node',
+            parameters = [config_energy_tank],
+            remappings = [],
+            output = 'screen'
+        ),
 
-        # Node(
-        #     package = 'perception',
-        #     name = 'perception_node',
-        #     executable = 'perception_node',
-        #     parameters = [config_perception],
-        #     remappings = [],
-        #     output = 'screen'
-        # ),
+        Node(
+            package = 'perception',
+            name = 'perception_node',
+            executable = 'perception_node',
+            parameters = [config_perception],
+            remappings = [],
+            output = 'screen'
+        ),
 
-        # Node(
-        #     package = 'variable_admittance_optimizer',
-        #     name = 'variable_admittance_optimizer_node',
-        #     executable = 'variable_admittance_optimizer_node',
-        #     parameters = [config_varadm_optimizer],
-        #     remappings = [],
-        #     output = 'screen'
-        # ),
+        Node(
+            package = 'variable_admittance_optimizer',
+            name = 'variable_admittance_optimizer_node',
+            executable = 'variable_admittance_optimizer_node',
+            parameters = [config_varadm_optimizer],
+            remappings = [],
+            output = 'screen'
+        ),
 
     ])
