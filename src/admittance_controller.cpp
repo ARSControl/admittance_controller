@@ -1,250 +1,94 @@
-/************************************************************************************
- * MIT License
- * 
- * Copyright (c) 2024 [Andrea Pupa] [Italo Almirante]
- * 
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- * 
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- ************************************************************************************/
-
-#include "admittance_controller/admittance_controller.hpp"
+#include "admittance_controller/admittance_controller.h"
 
 // Constructor for the AdmittanceController class
-AdmittanceController::AdmittanceController(const Eigen::Matrix<double, 6, 6> &Mdes,
-                                           const Eigen::Matrix<double, 6, 6> &Kdes, 
-                                           const Eigen::Matrix<double, 6, 6> &Bdes,
-                                           const double& n_joints, const double& ts,
-                                           const double& dz_force, const double& dz_torque,
-                                           const double& kp_pos,   const double& kp_rot,
-                                           const double& kp_push,  const double& push_force_goal,
-                                           const double& safe_push_dist)
+AdmittanceController::AdmittanceController(Eigen::Matrix<double, 6, 6> Mdes, Eigen::Matrix<double, 6, 6> Kdes, Eigen::Matrix<double, 6, 6> Bdes, std::string name, int n_joints, double ts)
 {
     // Initialize desired mass, damping, and stiffness matrices
     M_des_ = Mdes;
     B_des_ = Bdes;
     K_des_ = Kdes;
 
-    // Initialize number of joints and time step
-    n_joints_   = n_joints;
-    ts_         = ts;
+    // Initialize manipulator name and KDL model
+    manipulator_name_ = name;
+    robot_kdl = new ManipulatorKDL(manipulator_name_);
 
-    // Initialize internal stiffness matrix to compensate integral error
-    changeInternalP(kp_pos,kp_rot);
+    // Initialize number of joints and time step
+    n_joints_ = n_joints;
+    ts_ = ts;
+
+    // Resize and initialize joint position, velocity, and acceleration vectors
+    joint_position_.resize(n_joints, 1);
+    dq_.resize(n_joints_, 1);
+    ddq_.resize(n_joints_, 1);
+    jacobian_eigen_.resize(6, n_joints_);
+
+    // Set initial values to zero
+    joint_position_.setZero();
+    wrench_.setZero();
+    ddx_.setZero();
+    dx_.setZero();
+    x_.setZero();
+    dq_.setZero();
+    ddq_.setZero();
+    K_int_.setZero();
+
+    // Initialize internal stiffness matrix to compensate integration error
+    for (uint i = 0; i < 3; i++)
+    {
+        K_int_(i, i) = 0.0;
+        K_int_(i + 3, i + 3) = 0.0;
+    }
+
+    // Resize Jacobian matrix
+    jacobian_.resize(6);
+    for (uint i = 0; i < 6; i++)
+        jacobian_[i].resize(n_joints_);
 
     // Initialize low-pass filter for acceleration
-    ddx_filter_ = new filters::RCFilter(6, 30, ts_);
+    ddx_filter_ = new filters::RCFilter(6, 30.0, ts_);
 
     // Initialize admittance control parameters
-    admittance_active_  = false;
-    pushing_reg_active_ = false;
-    setDeadZone(dz_force,dz_torque);
-
-    // Inizialize pushing control
-    kp_push_         = kp_push;
-    push_force_goal_ = push_force_goal;
-    safe_push_dist_  = safe_push_dist;
-    cumulative_step_ = Eigen::VectorXd::Zero(3);
+    admittance_active_ = false;
+    dead_zone_force_ = 5.0;
+    dead_zone_torque_ = 0.5;
 }
-
-// ----------------------------- MATH UTILS  ----------------------------------- //
-void AdmittanceController::setToZeroIfSmall(double &value)
-{
-    if (std::abs(value) < 1e-20) {value = 0.0;}
-}
-
-double AdmittanceController::sign(double value)
-{
-    if      (value < 0) {return -1.;}
-    else if (value > 0) {return +1.;}
-    else                {return +0.;}
-}
-
-// ----------------------------- ADMITTANCE  ----------------------------------- //
-Eigen::VectorXd AdmittanceController::pushRegulation(const Eigen::VectorXd &wrench,const Eigen::VectorXd &xd,const Eigen::VectorXd &ee_pose)
-{
-    Eigen::VectorXd pushed_xd = xd;
-
-    // Iterate over the pushing direction
-    for(unsigned int k = 0; k<3; k++)
-    {
-        // If the robot is in contact with something over the pushing direction (over the positive axis)
-        if (wrench(k) < -0.01)
-        {
-            // If the robot has not been moved a lot under the pushing task
-            if (std::abs(ee_pose(k) - xd(k)) < safe_push_dist_)
-            {
-                // Update the goal over the pushing direction
-                cumulative_step_(k) += kp_push_ / K_des_(k,k) * (wrench(k) + push_force_goal_);
-            }
-        }
-        // If the robot is in contact with something over the pushing direction (over the negative axis)
-        if (wrench(k) > +0.01)
-        {
-            // If the robot has not been moved a lot under the pushing task
-            if (std::abs(ee_pose(k) - xd(k)) < safe_push_dist_)
-            {
-                // Update the goal over the pushing direction
-                cumulative_step_(k) += kp_push_ / K_des_(k,k) * (wrench(k) - push_force_goal_);
-            }
-        }
-        // If the robot is no more in contact, reset the pushing distance adjustement
-        else
-        {
-            cumulative_step_(k) = 0.;
-        }
-        // Return the result
-        pushed_xd(k) += cumulative_step_(k);
-    }
-
-    return pushed_xd;
-}
-
-// Method to compute joints velocities for kdl mode
-Eigen::VectorXd AdmittanceController::computeQSpeed(      Eigen::VectorXd &wrench,
-                                                    const Eigen::VectorXd &xd,
-                                                    const Eigen::VectorXd &ee_pose,
-                                                    const Eigen::VectorXd &dx,
-                                                    const Eigen::VectorXd &dx_des,
-                                                    const Eigen::VectorXd &ddx_des,
-                                                    const Eigen::MatrixXd &jacobian)
-{
-    // Initialize joints velocity vector as zero
-    Eigen::VectorXd dq = Eigen::VectorXd::Zero(n_joints_);
-    if (!admittance_active_) {return dq;}
-
-    // Compute force considering dead signal
-    computeDeadSignal(wrench, dead_zone_force_, dead_zone_torque_);
-
-    // Update xd to adapt to external force over interaction direction, then compute pose error
-    Eigen::VectorXd pose_err;
-    if (pushing_reg_active_)    {pose_err = computeError(ee_pose, pushRegulation(wrench,xd,ee_pose));}
-    else                        {pose_err = computeError(ee_pose, xd);}
-
-    // Compute the acceleration of the system
-    Eigen::VectorXd ddx = ddx_des + M_des_.inverse() * (wrench + B_des_ * (dx_des - dx) + K_des_ * pose_err);
-
-    // Apply the low-pass filter to the acceleration
-    ddx = ddx_filter_->filter(ddx);
-
-    // Increment the speed setpoint
-    Eigen::VectorXd dx_res = dx + ddx * ts_;
-
-    // Compute the speed setpoint to all joints
-    dq = jacobian.completeOrthogonalDecomposition().pseudoInverse() * (dx_res + K_int_ * pose_err);
-
-    // Set a minimum speed value
-    for (unsigned int k = 0; k < n_joints_; k++) {setToZeroIfSmall(dq[k]);}
-
-    // Return dq result
-    return dq;
-}
-
-// Method to compute joints velocities for kdl mode
-Eigen::VectorXd AdmittanceController::computeEESpeed(     Eigen::VectorXd &wrench,
-                                                    const Eigen::VectorXd &xd,
-                                                    const Eigen::VectorXd &ee_pose,
-                                                    const Eigen::VectorXd &dx,
-                                                    const Eigen::VectorXd &dx_des,
-                                                    const Eigen::VectorXd &ddx_des)
-{
-    // Initialize joints velocity vector as zero
-    Eigen::VectorXd dx_res = Eigen::VectorXd::Zero(6);
-    if (!admittance_active_) {return dx_res;}
-
-    // Compute force considering dead signal (wrench must be eventually alredy filtered)
-    computeDeadSignal(wrench, dead_zone_force_, dead_zone_torque_);
-    
-    // Update xd to adapt to external force over interaction direction, then compute pose error
-    Eigen::VectorXd pose_err;
-    if (pushing_reg_active_)    {pose_err = computeError(ee_pose, pushRegulation(wrench,xd,ee_pose));}
-    else                        {pose_err = computeError(ee_pose, xd);}
-
-    // Compute the acceleration of the system
-    Eigen::VectorXd ddx = ddx_des + M_des_.inverse() * (wrench + B_des_ * (dx_des - dx) + K_des_ * pose_err);
-
-    // Apply the low-pass filter to the acceleration
-    ddx = ddx_filter_->filter(ddx);
-
-    // Increment the speed setpoint
-    dx_res = dx + ddx * ts_;
-
-    // Set a minimum speed value
-    for (unsigned int k = 0; k < 6; k++) {setToZeroIfSmall(dx_res[k]);}
-
-    // Return dx result
-    return dx_res + K_int_ * pose_err;
-}
-
-// ------------------------- VARIABLE ADMITTANCE PARAMS --------------------------
 
 // Method to change the desired mass and damping matrices
-bool AdmittanceController::changeParameters(const Eigen::Matrix<double, 6, 6> &Mdes,
-                                            const Eigen::Matrix<double, 6, 6> &Bdes,
-                                            const Eigen::Matrix<double, 6, 6> &Kdes)
+bool AdmittanceController::changeParameters(Eigen::Matrix<double, 6, 6> &Mdes, Eigen::Matrix<double, 6, 6> &Bdes)
 {
-    // Update the desired mass, stiffnes and damping matrices
+    // Check if the matrices are of correct size
+    if (Mdes.rows() + Mdes.cols() + Bdes.rows() + Bdes.cols() != 24)
+        return false;
+
+    // Update the desired mass and damping matrices
     M_des_ = Mdes;
     B_des_ = Bdes;
-    K_des_ = Kdes;
     return true;
 }
-
-// Change a specific value of the admittance matrices
-void AdmittanceController::setAdmittanceParam(  const unsigned int  &matrix,
-                                                const unsigned int  &index,
-                                                const double        &value)
-{
-    // Arguments details:
-    // matrix: 0 (mass), 1 (damping), 2 (stiffness)
-    // index : 0 (tx), 1 (ty), 2 (tz), 3 (rx), 4 (ry), 5 (rz)
-    // value : the value to insert in the matrix
-    // Example: setAdmittanceParam(1,2,value) -> K_des_(2,2) = value
-
-    switch(matrix)
-    {
-        case 0:
-            {
-                M_des_(index,index) = value;
-            }
-            break;
-        case 1:
-            {
-                B_des_(index,index) = value;
-            }
-            break;
-        case 2:
-            {
-                K_des_(index,index) = value;
-            }
-            break;
-    }
-}
-
-// ------------------------- ADMITTANCE ENABLE/DISABLE --------------------------
 
 // Method to enable admittance control
 void AdmittanceController::enableAdmittance()
 {
+    // Check if the state has been updated
+    if (!state_updated_)
+    {
+        std::cout << "Error: You should update the state by calling updateJoints()!" << std::endl;
+        return;
+    }
+
     // Reset velocities and filter
-    // dq_.setZero();
-    // dx_.setZero();
-    Eigen::VectorXd reset_data = Eigen::VectorXd::Zero(6); 
-    ddx_filter_->reset(reset_data);
+    dq_.setZero();
+    dx_.setZero();
+    ddx_filter_->reset(Eigen::MatrixXd::Zero(6,1));
+
+    // Set initial position and orientation
+    x_(0, 0) = p_real_.position.x;
+    x_(1, 0) = p_real_.position.y;
+    x_(2, 0) = p_real_.position.z;
+    x_(3, 0) = p_real_.orientation.w;
+    x_(4, 0) = p_real_.orientation.x;
+    x_(5, 0) = p_real_.orientation.y;
+    x_(6, 0) = p_real_.orientation.z;
 
     // Activate admittance control
     admittance_active_ = true;
@@ -253,56 +97,86 @@ void AdmittanceController::enableAdmittance()
 // Method to disable admittance control
 void AdmittanceController::disableAdmittance()
 {
-    // Reset velocities and filter
-    // dq_.setZero();
-    // dx_.setZero();
-    Eigen::VectorXd reset_data = Eigen::VectorXd::Zero(6); 
-    ddx_filter_->reset(reset_data);
-
-    // Disable admittance control
     admittance_active_ = false;
+    state_updated_ = false;
+    dq_.setZero();
+    dx_.setZero();
 }
 
-// Method to enable pushing control
-void AdmittanceController::enablePush()
+// Method to change the internal stiffness matrix
+void AdmittanceController::changeInternalP(Eigen::Matrix<double, 6, 6> &Kint)
 {
-    pushing_reg_active_ = true;
-}
-
-// Method to disable pushing control
-void AdmittanceController::disablePush()
-{
-    pushing_reg_active_ = false;
-}
-
-// ------------------------------ FORCE HANDLING ---------------------------
-
-// Method to apply dead zone to a signal
-void AdmittanceController::cutSignal(double &x, const double &dead_zone)
-{
-    if      (x > +dead_zone)    {x = x - dead_zone;}
-    else if (x < -dead_zone)    {x = x + dead_zone;}
-    else                        {x = 0.0;}
-}
-
-// Method to apply dead zone to force and torque signals
-void AdmittanceController::computeDeadSignal(Eigen::VectorXd &f, const double &dead_zone_force, const double &dead_zone_torque)
-{
-    for (uint i = 0; i < 3; i++)
-    {
-        cutSignal(f(i),      dead_zone_force);
-        cutSignal(f(i + 3),  dead_zone_torque);
-    }
+    K_int_ = Kint;
 }
 
 // Method to set dead zone parameters for force and torque
-void AdmittanceController::setDeadZone(const double &dead_zone_force, const double &dead_zone_torque)
+void AdmittanceController::setDeadZone(double &dead_zone_force, double &dead_zone_torque)
 {
-    dead_zone_force_  = dead_zone_force;
+    dead_zone_force_ = dead_zone_force;
     dead_zone_torque_ = dead_zone_torque;
 }
 
-// --------------------------- QUATERNIONS HANDLING ---------------------------
+// Method to set filter parameters
+void AdmittanceController::setFilterParams(double &cutoff)
+{
+    ddx_filter_ = new filters::RCFilter(6, cutoff, ts_);
+}
+
+// Method to apply dead zone to a signal
+double AdmittanceController::cutSignal(double &x, double &dead_zone)
+{
+    if (x > dead_zone)
+        return x - dead_zone;
+    else if (x < -dead_zone)
+        return x + dead_zone;
+    else
+        return 0.0;
+}
+
+// Method to apply dead zone to force and torque signals
+void AdmittanceController::computeDeadSignal(Eigen::Matrix<double, 6, 1> &f, double &dead_zone_force, double &dead_zone_torque)
+{
+    for (uint i = 0; i < 3; i++)
+    {
+        f(i, 0) = cutSignal(f(i, 0), dead_zone_force);
+        f(i + 3, 0) = cutSignal(f(i + 3, 0), dead_zone_torque);
+    }
+}
+
+// Method to compute the error between the real and desired poses
+void AdmittanceController::computeError(geometry_msgs::msg::Pose &preal, geometry_msgs::msg::Pose &pdes, Eigen::Matrix<double, 6, 1> &err)
+{
+    err_.setZero();
+
+    // Compute position error
+    err_(0, 0) = pdes.position.x - preal.position.x;
+    err_(1, 0) = pdes.position.y - preal.position.y;
+    err_(2, 0) = pdes.position.z - preal.position.z;
+
+    // Compute orientation error using quaternions
+    Eigen::Quaterniond qact(preal.orientation.w, preal.orientation.x, preal.orientation.y, preal.orientation.z);
+    Eigen::Quaterniond qdes(pdes.orientation.w, pdes.orientation.x, pdes.orientation.y, pdes.orientation.z);
+    Eigen::Vector4d tmp_coeff;
+
+    if (qact.dot(qdes) < 0)
+        qdes.coeffs() = -qdes.coeffs();
+
+    double theta = std::acos(qact.dot(qdes));
+
+    Eigen::Quaterniond dq;
+    if (theta == 0)
+        dq = Eigen::Quaterniond(0.0, 0.0, 0.0, 0.0);
+    else
+    {
+        tmp_coeff = theta / std::sin(theta) * (qdes.coeffs() - std::cos(theta) * qact.coeffs());
+        dq = Eigen::Quaterniond(tmp_coeff[3], tmp_coeff[0], tmp_coeff[1], tmp_coeff[2]);
+    }
+
+    tmp_coeff = 2.0 * (dq * qact.conjugate()).coeffs();
+    err_(3, 0) = tmp_coeff(0);
+    err_(4, 0) = tmp_coeff(1);
+    err_(5, 0) = tmp_coeff(2);
+}
 
 // Method to apply exponential map to a quaternion
 void AdmittanceController::exponentialMapQuaternion(Eigen::Quaterniond &q)
@@ -316,86 +190,108 @@ void AdmittanceController::exponentialMapQuaternion(Eigen::Quaterniond &q)
     }
     else
     {
+        double cos_v_norm = std::cos(v_norm);
+        double sin_v_norm = std::sin(v_norm);
         Eigen::Vector3d v_unit = v / v_norm;
-        q.w()   = std::cos(v_norm);
-        q.vec() = std::sin(v_norm) * v_unit;
+
+        q.w() = cos_v_norm;
+        q.vec() = sin_v_norm * v_unit;
     }
 }
 
-// ---------------------- VARIABLE K FOR INTEGRAL ERROR -----------------------
-
-// Method to change the internal stiffness matrix
-void AdmittanceController::changeInternalP(const double &k_pos, const double &k_rot)
+// Method to update joint states
+void AdmittanceController::updateJoints(const std::vector<double> &q)
 {
-    K_int_.setZero();
+    state_updated_ = true;
+    robot_kdl->jac(q, jacobian_);
+    robot_kdl->fk(q, p_real_);
+}
+
+// Method to compute joint velocities based on wrench input
+Eigen::MatrixXd AdmittanceController::computeSpeed(Eigen::Matrix<double, 6, 1> &wrench)
+{
+    Eigen::Matrix<double, 6, 1> dx_des = Eigen::MatrixXd::Zero(6, 1);
+    Eigen::Matrix<double, 6, 1> ddx_des = Eigen::MatrixXd::Zero(6, 1);
+    Eigen::Matrix<double, 7, 1> x_des = Eigen::MatrixXd::Zero(7, 1);
+    return computeSpeed(wrench, x_des, dx_des, ddx_des);
+}
+
+// Overloaded method to compute joint velocities based on wrench, desired pose, and desired velocities
+Eigen::MatrixXd AdmittanceController::computeSpeed(Eigen::Matrix<double, 6, 1> &wrench, Eigen::Matrix<double, 7, 1> &xdes, Eigen::Matrix<double, 6, 1> &dx_des, Eigen::Matrix<double, 6, 1> &ddx_des)
+{
+    if (!admittance_active_)
+        return dq_;
+
+    wrench_ = wrench;
+    computeDeadSignal(wrench_, dead_zone_force_, dead_zone_torque_);
+
+    // std::cout << wrench_ << std::endl << std::endl;
+
+    p_des_.position.x = xdes(0, 0);
+    p_des_.position.y = xdes(1, 0);
+    p_des_.position.z = xdes(2, 0);
+
+    p_des_.orientation.w = xdes(3, 0);
+    p_des_.orientation.x = xdes(4, 0);
+    p_des_.orientation.y = xdes(5, 0);
+    p_des_.orientation.z = xdes(6, 0);
+
+    computeError(p_real_, p_des_, err_);
+
+    ddx_ = ddx_des + M_des_.inverse() * (wrench_ + B_des_ * (dx_des - dx_) + K_des_ * err_);
+
+    ddx_ = ddx_filter_->filter(ddx_);
+    // for (uint i = 0; i < 6; i++)
+    //     ddx_(i, 0) = ddx_tmp[i];
+    dx_ = dx_ + ddx_ * ts_;
+
+    for (uint i = 0; i < 6; i++)
+    {
+        for (int j = 0; j < n_joints_; j++)
+        {
+            jacobian_eigen_(i, j) = jacobian_[i][j];
+        }
+    }
+
+    p_des_.position.x = x_(0, 0);
+    p_des_.position.y = x_(1, 0);
+    p_des_.position.z = x_(2, 0);
+
+    p_des_.orientation.w = x_(3, 0);
+    p_des_.orientation.x = x_(4, 0);
+    p_des_.orientation.y = x_(5, 0);
+    p_des_.orientation.z = x_(6, 0);
+
+    computeError(p_real_, p_des_, err_);
+
+    dq_ = jacobian_eigen_.completeOrthogonalDecomposition().pseudoInverse() * (dx_ + K_int_ * err_);
 
     for (uint i = 0; i < 3; i++)
-    {
-        K_int_(i, i)         = k_pos;
-        K_int_(i + 3, i + 3) = k_rot;
-    }
+        x_(i, 0) += dx_(i, 0) * ts_;
+
+    Eigen::Quaterniond qact(x_(3, 0), x_(4, 0), x_(5, 0), x_(6, 0));
+    Eigen::Quaterniond qw(0.0, dx_(3, 0), dx_(4, 0), dx_(5, 0));
+    qw.coeffs() = 0.5 * ts_ * qw.coeffs();
+    exponentialMapQuaternion(qw);
+
+    qact = qact * qw;
+
+    x_(3, 0) = qact.w();
+    x_(4, 0) = qact.x();
+    x_(5, 0) = qact.y();
+    x_(6, 0) = qact.z();
+
+    return dq_;
 }
 
-// --------------------------- FILTER HANDLING ------------------------------
-
-// Method to set filter parameters
-void AdmittanceController::setFilterParams(const double &cutoff)
+Eigen::Matrix<double, 6, 1> AdmittanceController::returnTwist()
 {
-    delete ddx_filter_;
-    ddx_filter_ = new filters::RCFilter(6, cutoff, ts_);
+    return dx_;
 }
 
-// --------------------------- SETPOINT COMPUTATION ---------------------------
-
-// Method to compute the error between the real and desired poses
-Eigen::VectorXd AdmittanceController::computeError(const Eigen::VectorXd &preal, const Eigen::VectorXd &pdes)
+Eigen::MatrixXd AdmittanceController::computeAcceleration()
 {
-    Eigen::VectorXd err = Eigen::VectorXd::Zero(6);
-
-    // Compute position error
-    err(0) = pdes(0) - preal(0);
-    err(1) = pdes(1) - preal(1);
-    err(2) = pdes(2) - preal(2);
-
-    // Compute orientation error using quaternions
-    Eigen::Quaterniond qact(preal(6), preal(3), preal(4), preal(5));
-    Eigen::Quaterniond qdes( pdes(6),  pdes(3),  pdes(4),  pdes(5));
-    Eigen::Vector4d tmp_coeff;
-
-    if (qact.dot(qdes) < 0) {qdes.coeffs() = -qdes.coeffs();}
-
-    float theta = std::acos(qact.dot(qdes));
-
-    if (theta != theta)
-    {
-        theta = 0.0;
-    }        
-
-    Eigen::Quaterniond dq;
-    if (theta == 0.0)
-    {
-        dq = Eigen::Quaterniond(0.0, 0.0, 0.0, 0.0);
-    }
-    else
-    {
-        tmp_coeff = theta / std::sin(theta) * (qdes.coeffs() - std::cos(theta) * qact.coeffs());
-        dq = Eigen::Quaterniond(tmp_coeff[3], tmp_coeff[0], tmp_coeff[1], tmp_coeff[2]);
-    }
-
-    tmp_coeff = 2.0 * (dq * qact.conjugate()).coeffs();
-
-    // Fill the msg to return
-    err(3) = tmp_coeff(0);
-    err(4) = tmp_coeff(1);
-    err(5) = tmp_coeff(2);
-
-    return err;
-}
-
-// Empty private function to compute acceleration, still not implemented
-Eigen::VectorXd AdmittanceController::computeAcceleration()
-{
-    // Maybe if implementing the admittance control on a torque controlled robot will be needed
-    Eigen::VectorXd vector = Eigen::VectorXd::Zero(6);
-    return vector;
+    // I do not know if it make sense to compute ddq in another function
+    // Maybe if we want to implement admittance control on a torque controlled robot?
+    // For know this function is empty and it is private
 }

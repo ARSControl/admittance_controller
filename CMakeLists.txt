@@ -31,6 +31,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(manipulator_kdl REQUIRED)
+find_package(energy_tank REQUIRED)
 
 ############################################################
 ################## SET INCLUDE PATH ########################
@@ -47,19 +48,19 @@ include_directories(
 ################## LIBRARIES ##########################
 ############################################################
 add_library(admittance_controller SHARED src/admittance_controller.cpp)
-ament_target_dependencies(admittance_controller rclcpp std_msgs geometry_msgs filters Eigen3 std_srvs)
+ament_target_dependencies(admittance_controller rclcpp std_msgs geometry_msgs filters Eigen3 std_srvs manipulator_kdl)
 
-add_library(admittance_control SHARED src/admittance_control.cpp)
-ament_target_dependencies(admittance_control rclcpp std_msgs manipulator_kdl filters Eigen3 std_srvs)
-target_link_libraries(admittance_control admittance_controller)
+# add_library(admittance_control SHARED src/admittance_control.cpp)
+# ament_target_dependencies(admittance_control rclcpp std_msgs manipulator_kdl filters Eigen3 std_srvs)
+# target_link_libraries(admittance_control admittance_controller)
 
 
 ############################################################
 ################## EXECUTABLES #############################
 ############################################################
-add_executable(admittance_control_node src/admittance_control_node.cpp)
-ament_target_dependencies(admittance_control_node rclcpp std_msgs manipulator_kdl filters Eigen3)
-target_link_libraries(admittance_control_node admittance_control)
+add_executable(admittance_control_node src/admittance_control.cpp src/admittance_control_node.cpp)
+ament_target_dependencies(admittance_control_node rclcpp std_msgs manipulator_kdl filters Eigen3 energy_tank)
+target_link_libraries(admittance_control_node admittance_controller)
 
 
 ############################################################
@@ -83,15 +84,15 @@ install(
   INCLUDES DESTINATION include
 )
 
-install(
-  TARGETS 
-    admittance_control 
-  EXPORT export_admittance_control
-  ARCHIVE DESTINATION lib
-  LIBRARY DESTINATION lib
-  RUNTIME DESTINATION bin
-  INCLUDES DESTINATION include
-)
+# install(
+#   TARGETS 
+#     admittance_control 
+#   EXPORT export_admittance_control
+#   ARCHIVE DESTINATION lib
+#   LIBRARY DESTINATION lib
+#   RUNTIME DESTINATION bin
+#   INCLUDES DESTINATION include
+# )
 
 install(
   DIRECTORY
@@ -109,7 +110,7 @@ install(
 )
 
 # Export package dependencies
-ament_export_libraries(admittance_controller admittance_control)
+ament_export_libraries(admittance_controller) # admittance_control)
 ament_export_include_directories(include)
 ament_export_dependencies(rclcpp std_msgs manipulator_kdl filters Eigen3)
 
@@ -128,7 +129,7 @@ ament_export_dependencies(rclcpp std_msgs manipulator_kdl filters Eigen3)
 # )
 
 target_link_libraries(admittance_controller "${cpp_typesupport_target}")
-target_link_libraries(admittance_control "${cpp_typesupport_target}")
+# target_link_libraries(admittance_control "${cpp_typesupport_target}")
 
 ############################################################
 ################## BUILD TESTING ###########################
