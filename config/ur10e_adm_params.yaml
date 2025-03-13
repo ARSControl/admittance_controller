@@ -1,45 +1,47 @@
 # Parameters for the admittance control
 admittance_control_node:
   ros__parameters:
-    manipulator:      "ur10e"                                # Robot name
+    manipulator_name:     "ur10e"                               # Robot name
 
-    manipulator_name: "manipulator"                         # Robot planner group name
+    m_d:                  [12.5, 12.5, 12.5, 0.25, 0.25, 0.25]  # Diagonal mass    coefficients (kg)
+    k_d:                  [ 0.0,  0.0,  0.0, 0.00, 0.00, 0.00]  # [50.0,  50.0, 50.0,  1.0,  1.0,  1.0] # Diagonal spring  coefficients (N/m)
+    b_d:                  [25.0, 25.0, 25.0, 1.50, 1.50, 1.50]  # Diagonal damping coefficients (Ns/m)
 
-    m_d:              [12.5,   12.5,   12.5,  0.25,  0.25,  0.25] # Diagonal mass    coefficients (kg)
-    # k_d:              [50.0,  50.0, 50.0,  1.0,  1.0,  1.0] # Diagonal spring  coefficients (N/m)
-    k_d:              [0.0,  0.0, 0.0,  0.0,  0.0,  0.0] # Diagonal spring  coefficients (N/m)
-    b_d:              [25.0,  25.0, 25.0,  1.5 ,  1.5,  1.5] # Diagonal damping coefficients (Ns/m)
+    loop_rate:            500.0                                 # Hz
 
-    loop_rate:        500.0                                 # Hz
+    dz_force:             5.0                                   # force  dead zone
+    dz_torque:            0.3                                   # torque dead zone
 
-    dz_force:         5.0                                   # force  dead zone
-    dz_torque:        0.3                                   # torque dead zone
+    force_limit:          [30.0, 30.0, 30.0, 2.0, 2.0, 2.0]     # Force limits (Fx, Fy, Fz, Tx, Ty, Tz)
 
-    force_limit:      [30.0, 30.0, 30.0, 2.0, 2.0, 2.0]     # Force limits (Fx, Fy, Fz, Tx, Ty, Tz)
+    force_cut_freq:       100.0                                 # cut out frequence for wrench RC filter
 
-    force_cut_freq:   100.0                                 # cut out frequence for wrench RC filter
+    kp_pos:               0.0                                   # kp for position compensation
+    kp_rot:               0.0                                   # kp for rotation compensation
 
-    kp_pos:           0.0                                   # kp for position compensation
-    kp_rot:           0.0                                   # kp for rotation compensation
+    mode:                 "moveit"                              # Planner of the moves, default "kdl" or "moveit"
 
-    mode:             "moveit"                              # Planner of the moves, default "kdl" or "moveit"
+    # Subscribers
+    joint_state_topic:    "/joint_states"                       # joint state topic, default "/joint_states" 
+    force_feed_topic:     "/ur_rtde/ft_sensor"                  # force sensor reading topic, default "/ur_rtde/ft_sensor"
+    new_adm_params_topic: "/current_inertia_damping"            # new admittance parameters topic, default "/current_inertia_damping"
 
-    command_topic:    "/ur_rtde/controllers/cartesian_velocity_controller/command"                 # vel command to the manipulator's ee, default
-                                                            # "/ur_rtde/controllers/joint_velocity_controller/command" or "manipulator/cmd_vel" 
+    # Publishers
+    command_topic:        "/ur_rtde/controllers/joint_velocity_controller/command"  # vel command to the manipulator's joints, default
+                                                                                    # "/ur_rtde/controllers/cartesian_velocity_controller/command" or "manipulator/cmd_vel" 
+    cart_vel_topic:       "/cartesian_velocity"                 # cartesian velocity command topic, default "/cartesian_velocity"
 
-    force_feed_topic: "/ur_rtde/ft_sensor"                  # force sensor reading topic, default "/ur_rtde/ft_sensor"
+    # Services
+    enable_adm_service:   "/enable_admittance"                  # service call for enabling admittance, default "/enable_admittance"
+    zero_ft_topic:        "/ur_rtde/zeroFTSensor"               # server to reset the force/torque sensor, default
+                                                                # "/ur_rtde/zeroFTSensor"
+   
+    joint_names:          ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]
 
-    zero_ft_topic:    "/ur_rtde/zeroFTSensor"               # server to reset the force/torque sensor, default
-                                                            # "/ur_rtde/zeroFTSensor"
+    kp_push:              0.001                                 # Proportional gain for goal force regulation in the pushing task
 
-    ee_pose_topic:    "/manipulator/tcp_pose"               # topic to read tcp pose, default "/ur_rtde/cartesian_pose" or "/manipulator/tcp_pose" 
+    push_force_goal:      8.0                                   # Force goal to be regulated in the pushing task
 
-    ee_vel_topic:     "/ur_rtde/controllers/cartesian_velocity_controller/command"                # topic to read tcp vel,  default "/manipulator/tcp_vel"    or "/manipulator/cmd_vel"
+    safe_push_dist:       0.15                                  # Safety distance for the force regulation in the pushing task
 
-    joint_names:      ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]
-
-    kp_push:          0.001                                 # Proportional gain for goal force regulation in the pushing task
-
-    push_force_goal:  8.0                                   # Force goal to be regulated in the pushing task
-
-    safe_push_dist:   0.15                                  # Safety distance for the force regulation in the pushing task
+    data_logger:          false

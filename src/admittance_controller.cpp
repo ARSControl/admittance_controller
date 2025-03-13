@@ -241,8 +241,6 @@ Eigen::MatrixXd AdmittanceController::computeSpeed(Eigen::Matrix<double, 6, 1> &
     ddx_ = ddx_des + M_des_.inverse() * (wrench_ + B_des_ * (dx_des - dx_) + K_des_ * err_);
 
     ddx_ = ddx_filter_->filter(ddx_);
-    // for (uint i = 0; i < 6; i++)
-    //     ddx_(i, 0) = ddx_tmp[i];
     dx_ = dx_ + ddx_ * ts_;
 
     for (uint i = 0; i < 6; i++)

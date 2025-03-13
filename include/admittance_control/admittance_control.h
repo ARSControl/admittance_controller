@@ -24,6 +24,7 @@ public:
 	void writeToCSV();
 
 private:
+    void check_params();
 	void jointCallback(const std::shared_ptr<sensor_msgs::msg::JointState> msg);
     void forceSensorCallback(const std::shared_ptr<geometry_msgs::msg::Wrench> w);
     void inertiaDampingCallback(const std::shared_ptr<energy_tank::msg::InertiaDamping> new_params);
@@ -45,6 +46,16 @@ private:
     std::shared_ptr<AdmittanceController> adm_controller_;
 
 	rclcpp::Time start_time_;
+
+    std::string joints_state_topic_,        // Joint States topic
+                force_feed_topic_,          // Force-feed topic
+                new_adm_params_topic_,      // New Adm Params topic
+                command_topic_,             // Joint Velocity command topic
+                cart_vel_topic_,            // Cartesian Velocity topic
+                enable_adm_service_,        // Enable admittance service call
+                zero_ft_sensor_topic_;      // ZeroFT client topic
+
+    bool data_logger_enabled_;              // Data logger enabling var
 
 	// Logger
     std::vector<std::tuple< 
