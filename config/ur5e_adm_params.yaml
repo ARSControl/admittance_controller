@@ -1,16 +1,18 @@
 # Parameters for the admittance control
 admittance_control_node:
   ros__parameters:
-    manipulator_name:     "ur5e"                               # Robot name
 
-    m_d:                  [12.5, 12.5, 12.5, 0.25, 0.25, 0.25]  # Diagonal mass    coefficients (kg)
-    k_d:                  [ 0.0,  0.0,  0.0, 0.00, 0.00, 0.00]  # [50.0,  50.0, 50.0,  1.0,  1.0,  1.0] # Diagonal spring  coefficients (N/m)
-    b_d:                  [25.0, 25.0, 25.0, 1.50, 1.50, 1.50]  # Diagonal damping coefficients (Ns/m)
+
+m_d:              [15.0, 15.0, 15.0,  0.1,  0.1,  0.1] # Diagonal mass    coefficients (kg)
+
+k_d:              [30.0, 30.0, 30.0,  1.0,  1.0,  1.0] # Diagonal spring  coefficients (N/m)
+
+b_d:              [30.0, 30.0, 30.0,  0.5,  0.5,  0.5] # Diagonal damping coefficients (Ns/m)
 
     loop_rate:            500.0                                 # Hz
 
     dz_force:             5.0                                   # force  dead zone
-    dz_torque:            0.3                                   # torque dead zone
+    dz_torque:            1.0                                   # torque dead zone
 
     force_limit:          [30.0, 30.0, 30.0, 2.0, 2.0, 2.0]     # Force limits (Fx, Fy, Fz, Tx, Ty, Tz)
 
@@ -19,10 +21,7 @@ admittance_control_node:
     kp_pos:               0.0                                   # kp for position compensation
     kp_rot:               0.0                                   # kp for rotation compensation
 
-    mode:                 "moveit"                              # Planner of the moves, default "kdl" or "moveit"
-
     # Subscribers
-    joint_state_topic:    "/joint_states"                       # joint state topic, default "/joint_states" 
     force_feed_topic:     "/ur_rtde/ft_sensor"                  # force sensor reading topic, default "/ur_rtde/ft_sensor"
     new_adm_params_topic: "/current_inertia_damping"            # new admittance parameters topic, default "/current_inertia_damping"
 
@@ -42,6 +41,4 @@ admittance_control_node:
 
     push_force_goal:      8.0                                   # Force goal to be regulated in the pushing task
 
-    safe_push_dist:       0.15                                  # Safety distance for the force regulation in the pushing task
-
-    data_logger:          false
+    safe_push_dist:       0.20                                  # Safety distance for the force regulation in the pushing task

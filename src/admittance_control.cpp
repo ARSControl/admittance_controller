@@ -3,13 +3,11 @@
 // Constructor for the AdmittanceControl class
 AdmittanceControl::AdmittanceControl(const std::string& node_name) : rclcpp::Node(node_name)
 {
-
     // Update node params
     check_params();
     RCLCPP_INFO(this->get_logger(), "Params and attributes for admittance control are correctly initialized.");
 
     // --------- SUBSCRIBERS ------------
-    // Subscribe to joint states and force sensor topics
     joint_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(
         joints_state_topic_, 1, std::bind(&AdmittanceControl::jointCallback, this, std::placeholders::_1));
     force_sub_ = this->create_subscription<geometry_msgs::msg::Wrench>(
@@ -36,209 +34,68 @@ AdmittanceControl::AdmittanceControl(const std::string& node_name) : rclcpp::Nod
 
     // Initialize wrench to zero
     wrench_.setZero();
-
-    start_time_ = this->get_clock()->now();
 }
 
 // Node params update
 void AdmittanceControl::check_params()
 {
-    // Init joint names and number of joints
-    this->declare_parameter("joint_names", rclcpp::PARAMETER_STRING_ARRAY);
-    if (!this->has_parameter("joint_names")) {
-        RCLCPP_WARN(this->get_logger(), "Joint names not set, using default names.");
-        this->declare_parameter<std::vector<std::string>>("joint_names", {"shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"});
-    }
+    // Declare and get joint names
+    this->declare_parameter("joint_names", std::vector<std::string>{});
     std::vector<std::string> joint_names = this->get_parameter("joint_names").as_string_array();
     int n_joints = joint_names.size();
 
-    // Init admittance control matrices
-    this->declare_parameter("m_d", rclcpp::PARAMETER_DOUBLE_ARRAY);
-    this->declare_parameter("k_d", rclcpp::PARAMETER_DOUBLE_ARRAY);
-    this->declare_parameter("b_d", rclcpp::PARAMETER_DOUBLE_ARRAY);
-    if (!this->has_parameter("m_d")) {
-        RCLCPP_WARN(this->get_logger(), "Diagonal mass 'm_d' not set, using default value of 1.0.");
-        this->declare_parameter<std::vector<double>>("m_d", {1., 1., 1., 1., 1., 1.});
-    }
-    if (!this->has_parameter("k_d")) {
-        RCLCPP_WARN(this->get_logger(), "Diagonal spring constant 'k_d' not set, using default value of 100.0.");
-        this->declare_parameter<std::vector<double>>("k_d", {100., 100., 100., 100., 100., 100.});
-    }
-    if (!this->has_parameter("b_d")) {
-        RCLCPP_WARN(this->get_logger(), "Diagonal damping constant 'b_d' not set, using default value of 10.0.");
-        this->declare_parameter<std::vector<double>>("b_d", {10., 10., 10., 10., 10., 10.});
-    }
+    // Declare and get diagonal mass, damping, stiffness
+    this->declare_parameter("m_d", std::vector<double>{12.5, 12.5, 12.5, 0.25, 0.25, 0.25});
+    this->declare_parameter("k_d", std::vector<double>{0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+    this->declare_parameter("b_d", std::vector<double>{25.0, 25.0, 25.0, 1.5, 1.5, 1.5});
     std::vector<double> m_d = this->get_parameter("m_d").as_double_array();
     std::vector<double> k_d = this->get_parameter("k_d").as_double_array();
     std::vector<double> b_d = this->get_parameter("b_d").as_double_array();
 
-    // // Admittance params
-    // this->declare_parameter("dz_force", rclcpp::PARAMETER_DOUBLE);
-    // this->declare_parameter("dz_torque", rclcpp::PARAMETER_DOUBLE);
-    // this->declare_parameter("kp_pos", rclcpp::PARAMETER_DOUBLE);
-    // this->declare_parameter("kp_rot", rclcpp::PARAMETER_DOUBLE);
-    // if (!this->has_parameter("dz_force")) {
-    //     RCLCPP_WARN(this->get_logger(), "Force dead zone not set, using default: 5 N.");
-    //     this->declare_parameter<double>("dz_force", 5.0);
-    // }
-    // if (!this->has_parameter("dz_torque")) {
-    //     RCLCPP_WARN(this->get_logger(), "Torque dead zone not set, using default: 1 N.");
-    //     this->declare_parameter<double>("dz_torque", 1.0);
-    // }
-    // if (!this->has_parameter("kp_pos")) {
-    //     RCLCPP_WARN(this->get_logger(), "Proportional gain for position compensation not set, using default: 1.0.");
-    //     this->declare_parameter<double>("kp_pos", 1.0);
-    // }
-    // if (!this->has_parameter("kp_rot")) {
-    //     RCLCPP_WARN(this->get_logger(), "Proportional gain for rotation compensation not set, using default: 1.0.");
-    //     this->declare_parameter<double>("kp_rot", 1.0);
-    // }
-    // dz_force_  = this->get_parameter("dz_force").as_double();
-    // dz_torque_ = this->get_parameter("dz_torque").as_double();
-    // kp_pos_    = this->get_parameter("kp_pos").as_double();
-    // kp_rot_    = this->get_parameter("kp_rot").as_double();
+    // Declare and get controller gains
+    this->declare_parameter("kp_pos", 0.0);
+    this->declare_parameter("kp_rot", 0.0);
+    this->declare_parameter("kp_push", 0.001);
+    this->declare_parameter("push_force_goal", 8.0);
+    this->declare_parameter("safe_push_dist", 0.2);
 
-    // // Init interaction params
-    // this->declare_parameter("force_limit", rclcpp::PARAMETER_DOUBLE_ARRAY);
-    // if (!this->has_parameter("force_limit")) {
-    //     RCLCPP_WARN(this->get_logger(), "Force limit not set, using default values.");
-    //     this->declare_parameter<std::vector<double>>("force_limit", {1.0, 1.0, 1.0, 0.5, 0.5, 0.5});
-    // }
-    // std::vector<double> force_limit_vec = this->get_parameter("force_limit").as_double_array();
-    // for (unsigned int k = 0; k < 6; k++) {
-    //     force_limit_(k) = force_limit_vec[k];
-    // }
-    // this->declare_parameter("mode", rclcpp::PARAMETER_STRING);
-    // if (!this->has_parameter("mode")) {
-    //     RCLCPP_WARN(this->get_logger(), "Mode param not set, using default: kdl.");
-    //     this->declare_parameter<std::string>("mode", "kdl");
-    // }
-    // mode_ = this->get_parameter("mode").as_string();
-    // mode_bool_ = (mode_ != "kdl");
+    double kp_pos = this->get_parameter("kp_pos").as_double();
+    double kp_rot = this->get_parameter("kp_rot").as_double();
+    double kp_push = this->get_parameter("kp_push").as_double();
+    double push_force_goal = this->get_parameter("push_force_goal").as_double();
+    double safe_push_dist = this->get_parameter("safe_push_dist").as_double();
 
-    // Init control params
-    this->declare_parameter("loop_rate", rclcpp::PARAMETER_DOUBLE);
-    if (!this->has_parameter("loop_rate")) {
-        RCLCPP_WARN(this->get_logger(), "Loop rate not set, using default: 500 Hz.");
-        this->declare_parameter<double>("loop_rate", 500.0);
-    }
+    // Declare and get dead zone thresholds
+    this->declare_parameter("dz_force", 5.0);
+    this->declare_parameter("dz_torque", 0.3);
+    double dz_force = this->get_parameter("dz_force").as_double();
+    double dz_torque = this->get_parameter("dz_torque").as_double();
+
+    // Declare and get frequency
+    this->declare_parameter("force_cut_freq", 100.0);
+    this->declare_parameter("loop_rate", 500.0);
+    double acc_filter_freq = this->get_parameter("force_cut_freq").as_double();
     double loop_rate = this->get_parameter("loop_rate").as_double();
 
-    this->declare_parameter("manipulator_name", rclcpp::PARAMETER_STRING);
-    if (!this->has_parameter("manipulator_name")) {
-        RCLCPP_WARN(this->get_logger(), "Manipulator name not set, using default: manipulator.");
-        this->declare_parameter<std::string>("manipulator_name", "manipulator");
-    }
-    std::string manipulator_name = this->get_parameter("manipulator_name").as_string();
-    
-    // ----------------- TOPICS ---------------------
-    // Joint States topic
-    this->declare_parameter("joints_state_topic", rclcpp::PARAMETER_STRING);
-    if (!this->has_parameter("joints_state_topic")) {
-        RCLCPP_WARN(this->get_logger(), "Joint States topic param not set, using default: /joint_states");
-        this->declare_parameter<std::string>("joints_state_topic", "/joint_states");
-    }
-    joints_state_topic_ = this->get_parameter("joints_state_topic").as_string();
-
-    // Init force feedback topic
-    this->declare_parameter("force_feed_topic", rclcpp::PARAMETER_STRING);
-    if (!this->has_parameter("force_feed_topic")) {
-        RCLCPP_WARN(this->get_logger(), "Force feedback topic param not set, using default: /ur_rtde/ft_sensor.");
-        this->declare_parameter<std::string>("force_feed_topic", "/ur_rtde/ft_sensor");
-    }
-    force_feed_topic_ = this->get_parameter("force_feed_topic").as_string();
-
-    // Init new admittance parameters topic
-    this->declare_parameter("new_adm_params_topic", rclcpp::PARAMETER_STRING);
-    if (!this->has_parameter("new_adm_params_topic")) {
-        RCLCPP_WARN(this->get_logger(), "New adm params topic param not set, using default: /current_inertia_damping");
-        this->declare_parameter<std::string>("new_adm_params_topic", "/current_inertia_damping");
-    }
-    new_adm_params_topic_ = this->get_parameter("new_adm_params_topic").as_string();
-
-    // Init command topic
-    this->declare_parameter("command_topic", rclcpp::PARAMETER_STRING);
-    if (!this->has_parameter("command_topic")) {
-        RCLCPP_WARN(this->get_logger(), "Command topic param not set, using default: /ur_rtde/controllers/joint_velocity_controller/command.");
-        this->declare_parameter<std::string>("command_topic", "/ur_rtde/controllers/joint_velocity_controller/command");
-    }
-    command_topic_ = this->get_parameter("command_topic").as_string();
-
-    // Init cartesian velocity topic
-    this->declare_parameter("cart_vel_topic", rclcpp::PARAMETER_STRING);
-    if (!this->has_parameter("cart_vel_topic")) {
-        RCLCPP_WARN(this->get_logger(), "Cartesian velocity topic param not set, using default: /cartesian_velocity.");
-        this->declare_parameter<std::string>("cart_vel_topic", "/cartesian_velocity");
-    }
-    cart_vel_topic_ = this->get_parameter("cart_vel_topic").as_string();
-
-    // Init enable admittance service call
-    this->declare_parameter("enable_adm_service", rclcpp::PARAMETER_STRING);
-    if (!this->has_parameter("enable_adm_service")) {
-        RCLCPP_WARN(this->get_logger(), "Enable admittance service call param not set, using default: /enable_admittance.");
-        this->declare_parameter<std::string>("enable_adm_service", "/enable_admittance");
-    }
-    enable_adm_service_ = this->get_parameter("enable_adm_service").as_string();
-
-    // Zero force feed zero server
-    this->declare_parameter("zero_ft_topic", rclcpp::PARAMETER_STRING);
-    if (!this->has_parameter("zero_ft_topic")) {
-        RCLCPP_WARN(this->get_logger(), "Zero force feedback server name param not set, using default: /ur_rtde/zeroFTSensor.");
-        this->declare_parameter<std::string>("zero_ft_topic", "/ur_rtde/zeroFTSensor");
-    }
-    zero_ft_sensor_topic_ = this->get_parameter("zero_ft_topic").as_string();
-
-
-    // Data logger boolean value
-    this->declare_parameter("data_logger", rclcpp::PARAMETER_BOOL);
-    if (!this->has_parameter("data_logger")) {
-        RCLCPP_WARN(this->get_logger(), "Data logger activation param not set, using default: false.");
-        this->declare_parameter<bool>("data_logger", false);
-    }
-    data_logger_enabled_ = this->get_parameter("data_logger").as_bool();
-
-
-    // // Initialize low-pass filter for the wrench
-    // this->declare_parameter("force_cut_freq", rclcpp::PARAMETER_DOUBLE);
-    // if (!this->has_parameter("force_cut_freq")) {
-    //     RCLCPP_WARN(this->get_logger(), "Filter cut-out frequency not set, using default: 100 Hz.");
-    //     this->declare_parameter<double>("force_cut_freq", 100.0);
-    // }
-    // this->force_cut_freq_ = this->get_parameter("force_cut_freq").as_double();
-
-    // // Init pushing interaction params
-    // this->declare_parameter("kp_push", rclcpp::PARAMETER_DOUBLE);
-    // this->declare_parameter("push_force_goal", rclcpp::PARAMETER_DOUBLE);
-    // this->declare_parameter("safe_push_dist", rclcpp::PARAMETER_DOUBLE);
-    // if (!this->has_parameter("kp_push")) {
-    //     RCLCPP_WARN(this->get_logger(), "Proportional gain for pushing task not set, using default: 0.01.");
-    //     this->declare_parameter<double>("kp_push", 0.1);
-    // }
-    // if (!this->has_parameter("push_force_goal")) {
-    //     RCLCPP_WARN(this->get_logger(), "Goal force for pushing task not set, using default: 3.0.");
-    //     this->declare_parameter<double>("push_force_goal", 3.0);
-    // }
-    // if (!this->has_parameter("safe_push_dist")) {
-    //     RCLCPP_WARN(this->get_logger(), "Safety distance for pushing task not set, using default: 0.25.");
-    //     this->declare_parameter<double>("safe_push_dist", 0.25);
-    // }
-    // double kp_push         = this->get_parameter("kp_push").as_double();
-    // double push_force_goal = this->get_parameter("push_force_goal").as_double();
-    // double safe_push_dist  = this->get_parameter("safe_push_dist").as_double();
-
-    // Fill matrices values
+    // Fill matrices
     Eigen::Matrix<double, 6, 6> M_des = Eigen::Matrix<double, 6, 6>::Zero();
     Eigen::Matrix<double, 6, 6> K_des = Eigen::Matrix<double, 6, 6>::Zero();
     Eigen::Matrix<double, 6, 6> B_des = Eigen::Matrix<double, 6, 6>::Zero();
-
-    for (uint i = 0; i < 6; i++) {
+    for (int i = 0; i < 6; i++) {
         M_des(i, i) = m_d[i];
         K_des(i, i) = k_d[i];
         B_des(i, i) = b_d[i];
     }
 
-    // Create objects
-    adm_controller_ = std::make_shared<AdmittanceController>( M_des, K_des, B_des, manipulator_name , n_joints , 1/loop_rate );
+    // Create AdmittanceController object
+    adm_controller_ = std::make_shared<AdmittanceController>(
+        M_des, K_des, B_des,
+        n_joints, 1.0 / loop_rate,
+        dz_force, dz_torque,
+        kp_pos, kp_rot,
+        kp_push, push_force_goal,
+        safe_push_dist, acc_filter_freq
+    );
 }
 
 // Callback function for joint states
@@ -263,21 +120,6 @@ void AdmittanceControl::forceSensorCallback(const std::shared_ptr<geometry_msgs:
     wrench_(5, 0) = w->torque.z;
     // std::cout << "-----------3" << std::endl;
 
-}
-
-// Callback function for changin Inertia and Damping matrice
-void AdmittanceControl::inertiaDampingCallback(const std::shared_ptr<energy_tank::msg::InertiaDamping> new_params)
-{
-    // Extract new params
-    Vector6d new_inertia = Vector6d( new_params->inertia[0] , new_params->inertia[1] , new_params->inertia[2] ,
-                                     new_params->inertia[3] , new_params->inertia[4] , new_params->inertia[5] );
-    Vector6d new_damping = Vector6d( new_params->damping[0] , new_params->damping[1] , new_params->damping[2] ,
-                                     new_params->damping[3] , new_params->damping[4] , new_params->damping[5] );
-
-    Matrix6d new_Mdes = new_inertia.asDiagonal();
-    Matrix6d new_Ddes = new_damping.asDiagonal();
-
-    adm_controller_->changeParameters( new_Mdes , new_Ddes );
 }
 
 // Service callback to enable or disable admittance control
@@ -363,39 +205,4 @@ void AdmittanceControl::spinner()
     // Publish velocities
     joint_vel_pub_->publish(joint_vel);
     cartesian_vel_pub_->publish(cartesian_vel);
-}
-
-void AdmittanceControl::writeToCSV(){
-
-    if(!data_logger_enabled_){return;};
-
-    // Specify the full path to the CSV file
-    std::string file_path = "logged_data_adm.csv";
-    std::ofstream file;
-    file.open(file_path);
-
-    // Write headers
-    file << "timestamp,joint_vel_0,joint_vel_1,joint_vel_2,joint_vel_3,joint_vel_4,joint_vel_5,joint_pos_0,joint_pos_1,joint_pos_2,joint_pos_3,joint_pos_4,joint_pos_5\n";
-
-    // Write the data
-    for (const auto& entry : data_)
-    {
-        file << std::get<0>(entry) << ","; // Timestamp
-
-        // Write each data field, using value_or to provide a default empty value if the optional is not set
-        file << std::get<1>(entry).value_or(0.0) << ","; // 
-        file << std::get<2>(entry).value_or(0.0) << ","; // 
-        file << std::get<3>(entry).value_or(0.0) << ","; // 
-        file << std::get<4>(entry).value_or(0.0) << ","; // 
-        file << std::get<5>(entry).value_or(0.0) << ","; // 
-        file << std::get<6>(entry).value_or(0.0) << ","; // 
-        file << std::get<7>(entry).value_or(0.0) << ","; // 
-        file << std::get<8>(entry).value_or(0.0) << ","; // 
-        file << std::get<9>(entry).value_or(0.0) << ","; // 
-        file << std::get<10>(entry).value_or(0.0) << ","; //
-        file << std::get<11>(entry).value_or(0.0) << ","; //
-        file << std::get<12>(entry).value_or(0.0) << "\n"; //
-    }
-
-    file.close();
 }

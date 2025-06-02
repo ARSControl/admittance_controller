@@ -1,41 +1,37 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>admittance_controller</name>
-  <version>0.0.0</version>
-  <description>The admittance_controller package for ros2</description>
+  <version>1.0.0</version>
+  <description>Admittance controller for ROS 2 manipulators.</description>
 
   <author email="andrea.pupa@unimore.it">Andrea Pupa</author>
-
   <maintainer email="andrea.pupa@unimore.it">Andrea Pupa</maintainer>
-  <maintainer email="italo.almirante@unimore.it">Andrea Pupa</maintainer>
-  <maintainer email="matteo.nini@unimore.it">Matteo Nini</maintainer>
+  <maintainer email="italo.almirante@unimore.it">Italo Almirante</maintainer>
 
-  <license>MIT License</license>
+  <license>MIT</license>
 
+  <!-- Build tool -->
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <!-- Dependencies -->
+  <!-- Runtime & build dependencies -->
   <depend>rclcpp</depend>
   <depend>std_msgs</depend>
-  <depend>geometry_msgs</depend>
   <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
   <depend>std_srvs</depend>
   <depend>Eigen3</depend>
   <depend>filters</depend>
-  <depend>manipulator_kdl</depend>
-  <depend>energy_tank</depend>
 
-  <!-- To generate interfaces-->
+  <!-- Interface generation -->
   <buildtool_depend>rosidl_default_generators</buildtool_depend>
   <exec_depend>rosidl_default_runtime</exec_depend>
   <member_of_group>rosidl_interface_packages</member_of_group>
-  
-  <!-- <build_depend>manipulator_kdl</build_depend>
-  <exec_depend>manipulator_kdl</exec_depend> -->
 
+  <!-- Testing -->
   <test_depend>ament_lint_auto</test_depend>
-  <test_depend>ament_lint_auto</test_depend>
-  
+  <test_depend>ament_cmake_cpplint</test_depend>
+
+  <!-- Export -->
   <export>
     <build_type>ament_cmake</build_type>
   </export>
