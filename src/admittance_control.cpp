@@ -5,44 +5,49 @@ AdmittanceControl::AdmittanceControl(const std::string& node_name) : rclcpp::Nod
 {
     // Update node params
     check_params();
-    RCLCPP_INFO(this->get_logger(), "Params and attributes for admittance control are correctly initialized.");
 
     // --------- SUBSCRIBERS ------------
-    joint_sub_ = this->create_subscription<sensor_msgs::msg::JointState>(
-        joints_state_topic_, 1, std::bind(&AdmittanceControl::jointCallback, this, std::placeholders::_1));
-    force_sub_ = this->create_subscription<geometry_msgs::msg::Wrench>(
-        force_feed_topic_, 1, std::bind(&AdmittanceControl::forceSensorCallback, this, std::placeholders::_1));
+    joint_sub_ = this->create_subscription<sensor_msgs::msg::JointState>("/joint_states",1,
+                 std::bind(&AdmittanceControl::jointCallback, this, std::placeholders::_1));
 
-    // Variable admittance control
-    var_adm_sub_ = this->create_subscription<energy_tank::msg::InertiaDamping>(
-        new_adm_params_topic_, 1, std::bind(&AdmittanceControl::inertiaDampingCallback, this, std::placeholders::_1));
+    // Declare and get force sensor topic
+    this->declare_parameter("force_feed_topic", "/ur_rtde/ft_sensor");
+    std::string force_feed_topic = this->get_parameter("force_feed_topic").as_string();
+    force_sub_ = this->create_subscription<geometry_msgs::msg::Wrench>(force_feed_topic,1,
+                 std::bind(&AdmittanceControl::forceSensorCallback, this, std::placeholders::_1));
     
     // --------- PUBLISHERS -------------
-    // Publish joint velocity command topic
-    joint_vel_pub_ = this->create_publisher<std_msgs::msg::Float64MultiArray>(command_topic_, 1);
-
     // Publish EE velocity topic
-    cartesian_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(cart_vel_topic_, 1);
+    this->declare_parameter("command_topic", "/manipulator/command_vel");
+    std::string cart_vel_topic = this->get_parameter("joint_vel_topic").as_string();
+    cartesian_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(cart_vel_topic, 1);
     
     // --------- SERVICES ----------------
     // Publish service to enable admittance control
-    adm_service_ = this->create_service<std_srvs::srv::SetBool>(
-        enable_adm_service_, std::bind(&AdmittanceControl::enableAdmittance, this, std::placeholders::_1, std::placeholders::_2));
+    adm_service_ = this->create_service<std_srvs::srv::SetBool>("/enable_admittance",
+                   std::bind(&AdmittanceControl::enableAdmittance, this, std::placeholders::_1, std::placeholders::_2));
 
     // Create service client to zero the force-torque sensor
-    ft_client_ = this->create_client<std_srvs::srv::Trigger>(zero_ft_sensor_topic_);
+    this->declare_parameter("zero_ft_topic", "/ur_rtde/zeroFTSensor");
+    std::string zero_ft_sensor_topic = this->get_parameter("zero_ft_sensor_topic").as_string();
+    ft_client_ = this->create_client<std_srvs::srv::Trigger>(zero_ft_sensor_topic);
 
+    // --------------- INITIALIZATION----------------
     // Initialize wrench to zero
-    wrench_.setZero();
+    wrench_  = Eigen::VectorXd::Zero(7);
+    ee_pose_ = Eigen::VectorXd::Zero(7);
+    xd_      = Eigen::VectorXd::Zero(7);
+    dx_      = Eigen::VectorXd::Zero(6);
+    dx_des_  = Eigen::VectorXd::Zero(6);
+    ddx_des_ = Eigen::VectorXd::Zero(6);
 }
 
 // Node params update
 void AdmittanceControl::check_params()
 {
     // Declare and get joint names
-    this->declare_parameter("joint_names", std::vector<std::string>{});
-    std::vector<std::string> joint_names = this->get_parameter("joint_names").as_string_array();
-    int n_joints = joint_names.size();
+    this->declare_parameter("n_joints", 6);
+    n_joints_ = this->get_parameter("n_joints").as_int();
 
     // Declare and get diagonal mass, damping, stiffness
     this->declare_parameter("m_d", std::vector<double>{12.5, 12.5, 12.5, 0.25, 0.25, 0.25});
@@ -68,24 +73,20 @@ void AdmittanceControl::check_params()
     // Declare and get dead zone thresholds
     this->declare_parameter("dz_force", 5.0);
     this->declare_parameter("dz_torque", 0.3);
-    double dz_force = this->get_parameter("dz_force").as_double();
+    double dz_force  = this->get_parameter("dz_force").as_double();
     double dz_torque = this->get_parameter("dz_torque").as_double();
 
     // Declare and get frequency
     this->declare_parameter("force_cut_freq", 100.0);
     this->declare_parameter("loop_rate", 500.0);
     double acc_filter_freq = this->get_parameter("force_cut_freq").as_double();
-    double loop_rate = this->get_parameter("loop_rate").as_double();
+    loop_rate_             = this->get_parameter("loop_rate").as_double();
 
     // Fill matrices
-    Eigen::Matrix<double, 6, 6> M_des = Eigen::Matrix<double, 6, 6>::Zero();
-    Eigen::Matrix<double, 6, 6> K_des = Eigen::Matrix<double, 6, 6>::Zero();
-    Eigen::Matrix<double, 6, 6> B_des = Eigen::Matrix<double, 6, 6>::Zero();
-    for (int i = 0; i < 6; i++) {
-        M_des(i, i) = m_d[i];
-        K_des(i, i) = k_d[i];
-        B_des(i, i) = b_d[i];
-    }
+    Eigen::Matrix M_des = Eigen::MatrixXd::Zero(n_joints);
+    Eigen::Matrix K_des = Eigen::MatrixXd::Zero(n_joints);
+    Eigen::Matrix B_des = Eigen::MatrixXd::Zero(n_joints);
+    for (int i = 0; i < n_joints; i++) { M_des(i, i) = m_d[i]; K_des(i, i) = k_d[i]; B_des(i, i) = b_d[i]; }
 
     // Create AdmittanceController object
     adm_controller_ = std::make_shared<AdmittanceController>(
@@ -98,14 +99,104 @@ void AdmittanceControl::check_params()
     );
 }
 
+
+// ----------------------------- VARIABLE ADMITTANCE --------------------------- //
+void AdmittanceControl::changeMassAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
+{
+    adm_controller_->setAdmittanceParam(0,0,new_params->x);
+    adm_controller_->setAdmittanceParam(0,1,new_params->y);
+    adm_controller_->setAdmittanceParam(0,2,new_params->z);
+}
+
+void AdmittanceControl::changeDampAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
+{
+    adm_controller_->setAdmittanceParam(1,0,new_params->x);
+    adm_controller_->setAdmittanceParam(1,1,new_params->y);
+    adm_controller_->setAdmittanceParam(1,2,new_params->z);
+}
+
+void AdmittanceControl::changeStiffAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
+{
+    adm_controller_->setAdmittanceParam(2,0,new_params->x);
+    adm_controller_->setAdmittanceParam(2,1,new_params->y);
+    adm_controller_->setAdmittanceParam(2,2,new_params->z);
+}
+
+void AdmittanceControl::changeMassRotAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
+{
+    adm_controller_->setAdmittanceParam(3,0,new_params->x);
+    adm_controller_->setAdmittanceParam(3,1,new_params->y);
+    adm_controller_->setAdmittanceParam(3,2,new_params->z);
+}
+
+void AdmittanceControl::changeDampRotAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
+{
+    adm_controller_->setAdmittanceParam(4,0,new_params->x);
+    adm_controller_->setAdmittanceParam(4,1,new_params->y);
+    adm_controller_->setAdmittanceParam(4,2,new_params->z);
+}
+
+void AdmittanceControl::changeStiffRotAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
+{
+    adm_controller_->setAdmittanceParam(5,0,new_params->x);
+    adm_controller_->setAdmittanceParam(5,1,new_params->y);
+    adm_controller_->setAdmittanceParam(5,2,new_params->z);
+}
+
+// --------------------- QUATERNIONS HANDLER -------------------
+// Conversion from radians euler angles to quaternion
+Eigen::Quaterniond AdmittanceControl::quaternion_from_euler(const double& roll, const double& pitch, const double& yaw)
+{
+    // Create the rotation matrix from Euler angles
+    Eigen::AngleAxisd  rollAngle(roll,  Eigen::Vector3d::UnitX());
+    Eigen::AngleAxisd pitchAngle(pitch, Eigen::Vector3d::UnitY());
+    Eigen::AngleAxisd   yawAngle(yaw,   Eigen::Vector3d::UnitZ());
+
+    // Combine the rotations into a single quaternion
+    Eigen::Quaterniond quaternion = yawAngle * pitchAngle * rollAngle;
+
+    // Normalize the quaternion (Eigen quaternions are not automatically normalized)
+    quaternion.normalize();
+
+    return quaternion;
+}
+
+// Conversion from quaternion to radians euler angles
+Eigen::Vector3d AdmittanceControl::euler_from_quaternion(const Eigen::Quaterniond& quaternion)
+{
+    // Convert the quaternion to a rotation matrix
+    Eigen::Matrix3d rotationMatrix = quaternion.toRotationMatrix();
+
+    // Extract the Euler angles (roll, pitch, yaw) from the rotation matrix
+    Eigen::Vector3d euler_angles_rad = rotationMatrix.eulerAngles(2, 1, 0);  // ZYX order (yaw, pitch, roll)
+
+    // Convert the angles from radians to degrees
+    Eigen::Vector3d euler_angles;
+    euler_angles[0] = euler_angles_rad[2];  // Roll
+    euler_angles[1] = euler_angles_rad[1];  // Pitch
+    euler_angles[2] = euler_angles_rad[0];  // Yaw
+
+    // Check if angles are in the interval (-180,180]
+    for (unsigned int k = 0; k < 3; k++)
+    {
+        if      (euler_angles[k] < -M_PI) { euler_angles[k] += 2*M_PI; }
+        else if (euler_angles[k] > +M_PI) { euler_angles[k] -= 2*M_PI; }
+    }
+
+    return euler_angles;
+}
+
+
+
+
+
+
 // Callback function for joint states
 void AdmittanceControl::jointCallback(const std::shared_ptr<sensor_msgs::msg::JointState> js)
 {
     joint_pos_ = js->position;
     // Update joint positions in the admittance controller
     adm_controller_->updateJoints(js->position);
-    // std::cout << "-----------2" << std::endl;
-
 }
 
 // Callback function for force sensor data
@@ -118,8 +209,6 @@ void AdmittanceControl::forceSensorCallback(const std::shared_ptr<geometry_msgs:
     wrench_(3, 0) = w->torque.x;
     wrench_(4, 0) = w->torque.y;
     wrench_(5, 0) = w->torque.z;
-    // std::cout << "-----------3" << std::endl;
-
 }
 
 // Service callback to enable or disable admittance control

@@ -10,8 +10,10 @@
 class AdmittanceController
 {
 public:
-	AdmittanceController(const double& m_des,    const double& b_des, const double &k_des, 
-						 const  int&   n_joints, const double& ts,
+	AdmittanceController(const std::vector<double>& m_des,
+						 const std::vector<double>& k_des,
+						 const std::vector<double>& b_des, 
+						 const int&    n_joints, const double& ts,
 						 const double& dz_force, const double& dz_torque,
 						 const double& kp_pos,   const double& kp_rot,
 						 const double& kp_push,  const double& push_force_goal,

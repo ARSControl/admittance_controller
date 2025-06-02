@@ -1,7 +1,9 @@
 #include "admittance_controller/admittance_controller.h"
 
 // Constructor for the AdmittanceController class
-AdmittanceController::AdmittanceController( const double& m_des,    const double& b_des, const double &k_des, 
+AdmittanceController::AdmittanceController( const std::vector<double>& m_des,
+                                            const std::vector<double>& k_des,
+                                            const std::vector<double>& b_des, 
                                             const  int&   n_joints, const double& ts,
                                             const double& dz_force, const double& dz_torque,
                                             const double& kp_pos,   const double& kp_rot,
@@ -17,9 +19,17 @@ AdmittanceController::AdmittanceController( const double& m_des,    const double
     ts_ = ts;
 
     // Initialize desired mass, damping, and stiffness matrices to identity
-    M_des_ = Eigen::MatrixXd::Identity(n_joints_, n_joints_) * m_des;
-    B_des_ = Eigen::MatrixXd::Identity(n_joints_, n_joints_) * b_des;
-    K_des_ = Eigen::MatrixXd::Identity(n_joints_, n_joints_) * k_des;
+    M_des_ = Eigen::MatrixXd::Identity(n_joints_, n_joints_);
+    B_des_ = Eigen::MatrixXd::Identity(n_joints_, n_joints_);
+    K_des_ = Eigen::MatrixXd::Identity(n_joints_, n_joints_);
+
+    for (int i = 0; i < n_joints_; i++)
+    {
+        // Fill the diagonal of the matrices with the provided values
+        M_des_(i, i) = m_des[i];
+        K_des_(i, i) = k_des[i];
+        B_des_(i, i) = b_des[i];
+    }
 
     // Initialize internal stiffness matrix to compensate integral error
     changeInternalP(kp_pos,kp_rot);

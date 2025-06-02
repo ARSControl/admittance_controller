@@ -35,6 +35,10 @@ private:
 
 	Eigen::Matrix<double, 6, 1> wrench_;
     std::shared_ptr<AdmittanceController> adm_controller_;
+
+
+	int n_joints_;
+	double loop_rate_;
 };
 
 #endif /* ADMITTANCE_CONTROL */
