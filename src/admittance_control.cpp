@@ -7,29 +7,79 @@ AdmittanceControl::AdmittanceControl(const std::string& node_name) : rclcpp::Nod
     check_params();
 
     // --------- SUBSCRIBERS ------------
+    // Joint state subscriber
+    auto cb_group_js = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    rclcpp::SubscriptionOptions sub_options; sub_options.callback_group = cb_group_js;
     joint_sub_ = this->create_subscription<sensor_msgs::msg::JointState>("/joint_states",1,
-                 std::bind(&AdmittanceControl::jointCallback, this, std::placeholders::_1));
+                 std::bind(&AdmittanceControl::jointCallback, this, std::placeholders::_1), sub_options);
+
+    // TCP pose subscriber
+    auto cb_group_tcp_pose = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    sub_options.callback_group = cb_group_tcp_pose;
+    this->declare_parameter("tcp_pose_topic", manipulator_name+"tcp_pose");
+    std::string tcp_pose_topic = this->get_parameter("tcp_pose_topic").as_string();
+    tcp_pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(tcp_pose_topic, 1,
+                 std::bind(&AdmittanceControl::tcpPoseCallback, this, std::placeholders::_1), sub_options);
+
+    // TCP velocity subscriber
+    auto cb_group_tcp_vel = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    sub_options.callback_group = cb_group_tcp_vel;
+    this->declare_parameter("tcp_vel_topic", manipulator_name+"tcp_vel");
+    std::string tcp_vel_topic = this->get_parameter("tcp_vel_topic").as_string();
+    tcp_vel_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(tcp_vel_topic, 1,
+                 std::bind(&AdmittanceControl::tcpVelCallback, this, std::placeholders::_1), sub_options);
 
     // Declare and get force sensor topic
+    auto cb_group_force = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    sub_options.callback_group = cb_group_force;
     this->declare_parameter("force_feed_topic", "/ur_rtde/ft_sensor");
     std::string force_feed_topic = this->get_parameter("force_feed_topic").as_string();
     force_sub_ = this->create_subscription<geometry_msgs::msg::Wrench>(force_feed_topic,1,
-                 std::bind(&AdmittanceControl::forceSensorCallback, this, std::placeholders::_1));
+                 std::bind(&AdmittanceControl::forceSensorCallback, this, std::placeholders::_1), sub_options);
+
+    // Declare and get reference pose topic
+    auto cb_group_ref_pose = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    sub_options.callback_group = cb_group_ref_pose;
+    xd_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(manipulator_name+"/adm_xd", 1,
+                 std::bind(&AdmittanceControl::admittanceXdCallback, this, std::placeholders::_1), sub_options);
+
+    // Subscribers to change admittance
+    auto cb_group_adm = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+    sub_options.callback_group = cb_group_adm;
+    m_adm_pos_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(manipulator_name + "/m_adm_pos", 1,
+                        std::bind(&AdmittanceControl::changeMassAdmittanceCallback, this, std::placeholders::_1),sub_options);
+    b_adm_pos_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(manipulator_name + "/b_adm_pos", 1,
+                        std::bind(&AdmittanceControl::changeDampAdmittanceCallback, this, std::placeholders::_1),sub_options);
+    k_adm_pos_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(manipulator_name + "/k_adm_pos", 1,
+                        std::bind(&AdmittanceControl::changeStiffAdmittanceCallback, this, std::placeholders::_1),sub_options);
+    m_adm_rot_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(manipulator_name + "/m_adm_rot", 1,
+                        std::bind(&AdmittanceControl::changeMassRotAdmittanceCallback, this, std::placeholders::_1),sub_options);
+    b_adm_rot_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(manipulator_name + "/b_adm_rot", 1,
+                        std::bind(&AdmittanceControl::changeDampRotAdmittanceCallback, this, std::placeholders::_1),sub_options);
+    k_adm_rot_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(manipulator_name + "/k_adm_rot", 1,
+                        std::bind(&AdmittanceControl::changeStiffRotAdmittanceCallback, this, std::placeholders::_1),sub_options);
     
     // --------- PUBLISHERS -------------
     // Publish EE velocity topic
-    this->declare_parameter("command_topic", "/manipulator/command_vel");
-    std::string cart_vel_topic = this->get_parameter("joint_vel_topic").as_string();
+    this->declare_parameter("command_topic", manipulator_name+"/cmd_vel");
+    std::string cart_vel_topic = this->get_parameter("command_topic").as_string();
     cartesian_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(cart_vel_topic, 1);
+
+    // Publish filtered force-torque sensor topic
+    wf_pub_ = this->create_publisher<geometry_msgs::msg::Wrench>(manipulator_name+"/filtered_wrench", 1);
     
     // --------- SERVICES ----------------
     // Publish service to enable admittance control
-    adm_service_ = this->create_service<std_srvs::srv::SetBool>("/enable_admittance",
+    adm_service_ = this->create_service<std_srvs::srv::SetBool>(manipulator_name+"/enable_admittance",
                    std::bind(&AdmittanceControl::enableAdmittance, this, std::placeholders::_1, std::placeholders::_2));
+
+    // Publish service to enable pushing control
+    push_service_ = this->create_service<std_srvs::srv::SetBool>(manipulator_name+"/enable_push_regulation",
+                   std::bind(&AdmittanceControl::enablePush, this, std::placeholders::_1, std::placeholders::_2));
 
     // Create service client to zero the force-torque sensor
     this->declare_parameter("zero_ft_topic", "/ur_rtde/zeroFTSensor");
-    std::string zero_ft_sensor_topic = this->get_parameter("zero_ft_sensor_topic").as_string();
+    std::string zero_ft_sensor_topic = this->get_parameter("zero_ft_topic").as_string();
     ft_client_ = this->create_client<std_srvs::srv::Trigger>(zero_ft_sensor_topic);
 
     // --------------- INITIALIZATION----------------
@@ -40,6 +90,7 @@ AdmittanceControl::AdmittanceControl(const std::string& node_name) : rclcpp::Nod
     dx_      = Eigen::VectorXd::Zero(6);
     dx_des_  = Eigen::VectorXd::Zero(6);
     ddx_des_ = Eigen::VectorXd::Zero(6);
+    q_       = Eigen::VectorXd::Zero(n_joints_);
 }
 
 // Node params update
@@ -48,6 +99,8 @@ void AdmittanceControl::check_params()
     // Declare and get joint names
     this->declare_parameter("n_joints", 6);
     n_joints_ = this->get_parameter("n_joints").as_int();
+    this->declare_parameter("manipulator_name", "manipulator");
+    std::string manipulator_name = this->get_parameter("manipulator_name").as_string();
 
     // Declare and get diagonal mass, damping, stiffness
     this->declare_parameter("m_d", std::vector<double>{12.5, 12.5, 12.5, 0.25, 0.25, 0.25});
@@ -97,8 +150,11 @@ void AdmittanceControl::check_params()
         kp_push, push_force_goal,
         safe_push_dist, acc_filter_freq
     );
-}
 
+    // Init force filter
+    force_filter_ = new filters::RCFilter(6, acc_filter_freq, 1.0 / loop_rate_);
+
+}
 
 // ----------------------------- VARIABLE ADMITTANCE --------------------------- //
 void AdmittanceControl::changeMassAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
@@ -188,6 +244,7 @@ Eigen::Vector3d AdmittanceControl::euler_from_quaternion(const Eigen::Quaternion
 
 
 
+// CONTINUE FROM HERE
 
 
 
