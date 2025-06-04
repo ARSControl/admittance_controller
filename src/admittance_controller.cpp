@@ -68,7 +68,7 @@ Eigen::VectorXd AdmittanceController::pushRegulation(const Eigen::VectorXd &wren
     double push_force_goal_local = push_force_goal_;
 
     // Iterate over the pushing direction
-    for(unsigned int k = 0; k < 3; k++)
+    for(unsigned int k = 0; k < 1; k++)
     {
         // If the wrench is negative, the cumulative step is positive, meaning the robot is being pushed
         if (wrench(k) < 0)
@@ -83,7 +83,7 @@ Eigen::VectorXd AdmittanceController::pushRegulation(const Eigen::VectorXd &wren
             if (std::abs(ee_pose(k) - xd(k)) < safe_push_dist_)
             {
                 // Update the goal over the pushing direction
-                cumulative_step_(k) += kp_push_ / K_des_(k,k) * (wrench(k) - push_force_goal_);
+                cumulative_step_(k) += kp_push_ / K_des_(k,k) * (wrench(k) - push_force_goal_local);
             }
         }
         // If the robot is no more in contact, reset the pushing distance adjustement

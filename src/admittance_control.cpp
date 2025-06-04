@@ -211,7 +211,7 @@ void AdmittanceControl::updateParamOnWrenchError(const Eigen::VectorXd& wrench, 
     double lambda = 1.0;
 
     // Iterate over the force components to change the desired admittance mass 
-    for (unsigned int k = 0; k < 3; k++)
+    for (unsigned int k = 0; k < 1; k++)
     {
         // Calculate the difference between the current force and the reference force
         double delta_force = std::abs(std::abs(wrench(k)) - std::abs(reference_force));
@@ -419,7 +419,7 @@ void AdmittanceControl::computeAdmittanceControl()
     Eigen::VectorXd filtered_wrench = wrenchFilter(wrench_);
 
     // Adapt parameters if the force error is not zero
-    // adm_controller_->updateParamOnWrenchError(filtered_wrench, push_force_goal_);
+    updateParamOnWrenchError(filtered_wrench, push_force_goal_);
 
     // Compute the desired end-effector speed according to the admittance controller
     Eigen::VectorXd dx_cmd = adm_controller_->computeEESpeed(filtered_wrench,xd_,ee_pose_,dx_,dx_des_,ddx_des_);
