@@ -1,7 +1,7 @@
 /*
 	MIT License
 
-	Copyright (c) [2024] [Andrea Pupa] [Italo Almirante] [Matteo Nini]
+	Copyright (c) [2024] [Andrea Pupa] [Italo Almirante]
 
 	Permission is hereby granted, free of charge, to any person obtaining a copy
 	of this software and associated documentation files (the "Software"), to deal
@@ -31,23 +31,12 @@ int main(int argc, char **argv)
     // Initialize ROS2
     rclcpp::init(argc, argv);
 
-    // Node name
-    std::string node_name = "admittance_control_node";
-
     // Create a node using the rclcpp library
-    auto node = std::make_shared<AdmittanceControl>(node_name);
+    auto node = std::make_shared<AdmittanceControl>();
+    RCLCPP_INFO(node->get_logger(), "Admittance control node initialized successfully.");
 
-	rclcpp::Rate rate(500.0);
-	while (rclcpp::ok())
-	{
-		node->spinner();
-		rate.sleep();
-	}
-	
-    node->writeToCSV();
-    
-    // Shutdown ROS2
-    rclcpp::shutdown();
+	// Spin the node to start handling callbacks and timers
+    node->spinner();
 
-    return 0;
+    return 0;;
 }

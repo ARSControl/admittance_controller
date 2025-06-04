@@ -30,6 +30,7 @@ add_library(admittance_controller SHARED
   src/admittance_controller.cpp
 )
 
+# --------- ADMITTANCE CONTROLLER ---------
 ament_target_dependencies(admittance_controller
   rclcpp
   std_msgs
@@ -40,7 +41,7 @@ ament_target_dependencies(admittance_controller
   filters_c
 )
 
-# Executable target
+# --------- ADMITTANCE CONTROL NODE ---------
 add_executable(admittance_control_node
   src/admittance_control.cpp
   src/admittance_control_node.cpp
@@ -67,6 +68,14 @@ install(TARGETS
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )
+
+# -------------- WRENCH PLOTTER --------------
+add_executable(wrench_plot_publisher src/wrench_plot_publisher.cpp)
+ament_target_dependencies(wrench_plot_publisher rclcpp std_msgs geometry_msgs)
+install(TARGETS
+  wrench_plot_publisher
+  DESTINATION lib/${PROJECT_NAME})
+
 
 # Install headers
 install(DIRECTORY include/

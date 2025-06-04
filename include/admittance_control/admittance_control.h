@@ -14,7 +14,7 @@
 class AdmittanceControl : public rclcpp::Node
 {
 public:
-	AdmittanceControl(const std::string& node_name);
+	AdmittanceControl();
 	void spinner(void);
 
 private:

@@ -1,7 +1,7 @@
 #include "admittance_control/admittance_control.h"
 
 // Constructor for the AdmittanceControl class
-AdmittanceControl::AdmittanceControl(const std::string& node_name) : rclcpp::Node(node_name)
+AdmittanceControl::AdmittanceControl(): Node("admittance_control_node")
 {
     // Update node params
     check_params();
@@ -18,7 +18,7 @@ AdmittanceControl::AdmittanceControl(const std::string& node_name) : rclcpp::Nod
     sub_options.callback_group = cb_group_tcp_pose;
     this->declare_parameter("tcp_pose_topic", manipulator_name+"tcp_pose");
     std::string tcp_pose_topic = this->get_parameter("tcp_pose_topic").as_string();
-    tcp_pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(tcp_pose_topic, 1,
+    tcp_pose_sub_ = this->create_subscription<geometry_msgs::msg::Pose>(tcp_pose_topic, 1,
                  std::bind(&AdmittanceControl::tcpPoseCallback, this, std::placeholders::_1), sub_options);
 
     // TCP velocity subscriber
@@ -40,7 +40,7 @@ AdmittanceControl::AdmittanceControl(const std::string& node_name) : rclcpp::Nod
     // Declare and get reference pose topic
     auto cb_group_ref_pose = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     sub_options.callback_group = cb_group_ref_pose;
-    xd_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(manipulator_name+"/adm_xd", 1,
+    xd_sub_ = this->create_subscription<geometry_msgs::msg::Pose>(manipulator_name+"/adm_xd", 1,
                  std::bind(&AdmittanceControl::admittanceXdCallback, this, std::placeholders::_1), sub_options);
 
     // Subscribers to change admittance
@@ -81,6 +81,11 @@ AdmittanceControl::AdmittanceControl(const std::string& node_name) : rclcpp::Nod
     this->declare_parameter("zero_ft_topic", "/ur_rtde/zeroFTSensor");
     std::string zero_ft_sensor_topic = this->get_parameter("zero_ft_topic").as_string();
     ft_client_ = this->create_client<std_srvs::srv::Trigger>(zero_ft_sensor_topic);
+
+    // ---------------- SHUTDOWN HANDLER ----------------
+    rclcpp::contexts::get_global_default_context()->add_pre_shutdown_callback(
+        std::bind(&AdmittanceControl::shutdown_handler, this) // Register shutdown handler
+    );
 
     // --------------- INITIALIZATION----------------
     // Initialize wrench to zero
@@ -242,113 +247,166 @@ Eigen::Vector3d AdmittanceControl::euler_from_quaternion(const Eigen::Quaternion
     return euler_angles;
 }
 
+// --------------------------- ROBOT STATE CALLBACKS -------------------------------
 
+// Robot tcp pose callback
+void AdmittanceControl::tcpPoseCallback(const std::shared_ptr<geometry_msgs::msg::Pose> msg)
+{
+    // Update end-effector pose
+    ee_pose_(0) = msg->position.x;
+    ee_pose_(1) = msg->position.y;
+    ee_pose_(2) = msg->position.z;
+    // Eigen::Vector3d ee_pose_rpy = euler_from_quaternion(msg->pose.orientation);
+    // ee_pose_(3) = ee_pose_rpy(0);
+    // ee_pose_(4) = ee_pose_rpy(1);
+    // ee_pose_(5) = ee_pose_rpy(2);
+    ee_pose_(3) = msg->orientation.x;
+    ee_pose_(4) = msg->orientation.y;
+    ee_pose_(5) = msg->orientation.z;
+    ee_pose_(6) = msg->orientation.w;
+}
 
-// CONTINUE FROM HERE
-
-
-
-// Callback function for joint states
+// Joint state callback
 void AdmittanceControl::jointCallback(const std::shared_ptr<sensor_msgs::msg::JointState> js)
 {
-    joint_pos_ = js->position;
-    // Update joint positions in the admittance controller
-    adm_controller_->updateJoints(js->position);
+    q_(0) = msg->position[0];
+    q_(1) = msg->position[1];
+    q_(2) = msg->position[2];
+    q_(3) = msg->position[3];
+    q_(4) = msg->position[4];
+    q_(5) = msg->position[5];
 }
+
+// Robot twist callback
+void AdmittanceControl::tcpTwistCallback(const std::shared_ptr<geometry_msgs::msg::Twist> msg)
+{
+    dx_(0) = msg->linear.x;
+    dx_(1) = msg->linear.y;
+    dx_(2) = msg->linear.z;
+    dx_(3) = msg->angular.x;
+    dx_(4) = msg->angular.y;
+    dx_(5) = msg->angular.z;
+}
+
+// ---------------------------------- SENSORS -------------------------------- 
 
 // Callback function for force sensor data
 void AdmittanceControl::forceSensorCallback(const std::shared_ptr<geometry_msgs::msg::Wrench> w)
 {
     // Update wrench values with force and torque data
-    wrench_(0, 0) = w->force.x;
-    wrench_(1, 0) = w->force.y;
-    wrench_(2, 0) = w->force.z;
-    wrench_(3, 0) = w->torque.x;
-    wrench_(4, 0) = w->torque.y;
-    wrench_(5, 0) = w->torque.z;
+    wrench_(0) = w->force.x;
+    wrench_(1) = w->force.y;
+    wrench_(2) = w->force.z;
+    wrench_(3) = w->torque.x;
+    wrench_(4) = w->torque.y;
+    wrench_(5) = w->torque.z;
 }
 
-// Service callback to enable or disable admittance control
-bool AdmittanceControl::enableAdmittance(const std::shared_ptr<std_srvs::srv::SetBool::Request> req,
-    std::shared_ptr<std_srvs::srv::SetBool::Response> res)
+Eigen::VectorXd AdmittanceControl::wrenchFilter(const Eigen::VectorXd& wrench)
 {
-    if (req->data)
-    {
-        // Enable admittance control and zero the force-torque sensor
-        adm_controller_->enableAdmittance();
-        auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
-        ft_client_->async_send_request(
-            request,
-            [this](rclcpp::Client<std_srvs::srv::Trigger>::SharedFuture future)
-            {
-                try
-                {
-                    auto response = future.get();
-                    if (!response->success)
-                    {
-                        RCLCPP_WARN(this->get_logger(), "Force-torque sensor zeroing service failed.");
-                    }
-                    else
-                    {
-                        RCLCPP_INFO(this->get_logger(), "Force-torque sensor zeroing service succeeded.");
-                    }
-                }
-                catch (const std::exception &e)
-                {
-                    RCLCPP_ERROR(this->get_logger(), "Service call failed: %s", e.what());
-                }
-            });
-    }
-    else
-    {
-        // Disable admittance control
-        adm_controller_->disableAdmittance();
-    }
+    Eigen::VectorXd filtered_wrench = force_filter_->filter(wrench);
 
-    res->success = true;
-    return true;
+    geometry_msgs::Wrench wrench_msg;
+    wrench_msg.force.x  = filtered_wrench(0);
+    wrench_msg.force.y  = filtered_wrench(1);
+    wrench_msg.force.z  = filtered_wrench(2);
+    wrench_msg.torque.x = filtered_wrench(3);
+    wrench_msg.torque.y = filtered_wrench(4);
+    wrench_msg.torque.z = filtered_wrench(5);
+
+    wf_pub_.publish(wrench_msg);
+
+    return filtered_wrench;
 }
 
+// ----------------------------- SETPOINT UPDATE -----------------------------
+void AdmittanceControl::admittanceXdCallback(const std::shared_ptr<geometry_msgs::msg::Pose> msg)
+{
+    xd_(0) = p->position.x;
+    xd_(1) = p->position.y;
+    xd_(2) = p->position.z;
+    // Eigen::Vector3d x_rpy = euler_from_quaternion(msg->pose.orientation);
+    // xd_(3) = x_rpy(0);
+    // xd_(4) = x_rpy(1);
+    // xd_(5) = x_rpy(2);
+    xd_(3) = p->orientation.x;
+    xd_(4) = p->orientation.y;
+    xd_(5) = p->orientation.z;
+    xd_(6) = p->orientation.w; 
+}
+
+// ----------------------------- SERVICE CALLBACKS -----------------------------
+// Service callback to enable or disable admittance control
+void AdmittanceControl::enableAdmittance(const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+                                         std::shared_ptr<std_srvs::srv::SetBool::Response>      response)
+{
+    enable_admittance_ = request->data;  // Assuming you have a flag `enable_admittance_`
+    RCLCPP_INFO(this->get_logger(), "Admittance control %s", enable_admittance_ ? "ENABLED" : "DISABLED");
+
+    response->success = true;
+    response->message = enable_admittance_ ? "Admittance control enabled" : "Admittance control disabled";
+}
+
+// Service callback to enable or disable push regulation
+void AdmittanceControl::enablePush(const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+                                   std::shared_ptr<std_srvs::srv::SetBool::Response>      response)
+{
+    enable_push_ = request->data;  // Assuming you have a flag `enable_push_`
+    RCLCPP_INFO(this->get_logger(), "Push regulation %s", enable_push_ ? "ENABLED" : "DISABLED");
+
+    response->success = true;
+    response->message = enable_push_ ? "Push regulation enabled" : "Push regulation disabled";
+}
+
+
+// ----------------------------- MAIN LOOP -----------------------------
 // Main loop to compute and publish joint velocities
-void AdmittanceControl::spinner()
+void AdmittanceControl::computeAdmittanceControl()
 {   
-    rclcpp::spin_some(this->get_node_base_interface());
-    auto dq = adm_controller_->computeSpeed(wrench_);
+    // Filter wrench measurements
+    Eigen::VectorXd filtered_wrench = wrenchFilter(wrench_);
 
-    auto dx = adm_controller_->returnTwist();
-    std_msgs::msg::Float64MultiArray joint_vel;
+    // Compute the desired end-effector speed according to the admittance controller
+    Eigen::VectorXd dx_ = adm_controller_->computeEESpeed(filtered_wrench,xd_,ee_pose_,dx_,dx_des_,ddx_des_);
+
+    // Publish the ee speed 
     geometry_msgs::msg::Twist cartesian_vel;
-    for (uint i = 0; i < dq.rows(); i++)
-        joint_vel.data.push_back(dq(i, 0));
-
-    cartesian_vel.linear.x  = dx(0);
-    cartesian_vel.linear.y  = dx(1);
-    cartesian_vel.linear.z  = dx(2);
-    cartesian_vel.angular.x = dx(3);
-    cartesian_vel.angular.y = dx(4);
-    cartesian_vel.angular.z = dx(5);
-
-    if(data_logger_enabled_){
-        auto now = this->get_clock()->now();
-
-        data_.emplace_back( 
-            (now.nanoseconds() - start_time_.nanoseconds()) / 1e6,
-            dq(0,0),
-            dq(1,0),
-            dq(2,0),
-            dq(3,0),
-            dq(4,0),
-            dq(5,0),
-            joint_pos_[0],
-            joint_pos_[1],
-            joint_pos_[2],
-            joint_pos_[3],
-            joint_pos_[4],
-            joint_pos_[5]
-        );
-    }
-
-    // Publish velocities
-    joint_vel_pub_->publish(joint_vel);
+    cartesian_vel.linear.x  = dx_(0);
+    cartesian_vel.linear.y  = dx_(1);
+    cartesian_vel.linear.z  = dx_(2);
+    cartesian_vel.angular.x = dx_(3);
+    cartesian_vel.angular.y = dx_(4);
+    cartesian_vel.angular.z = dx_(5);
     cartesian_vel_pub_->publish(cartesian_vel);
+}
+
+// ------------------------------ SPINNER -----------------------------
+void ManipulatorPlannerNode::shutdown_handler()
+{
+    RCLCPP_INFO(get_logger(), "Admittance controller mean time: %f s", spinner_mean_);
+    rclcpp::shutdown();
+}
+
+void AdmittanceControl::spinner()
+{
+    // Add the node to the executor
+    executor_.add_node(shared_from_this());
+
+    // Create timer callback with specified frequency (loop_rate_ in Hz)
+    timer_ = this->create_wall_timer(
+        std::chrono::duration<double>(1.0 / loop_rate_),  // period in seconds
+        [this]() {
+
+                // This is the main loop for the node
+                auto start_time = steady_clock.now();
+                // Compute admittance control
+                computeAdmittanceControl();
+                // Calculate the mean time for each iteration of the spinner
+                double elapsed_time = (steady_clock.now() - start_time).seconds();
+                spinner_mean_ = (spinner_mean_ * static_cast<double>(num_samples) + elapsed_time) / static_cast<double>(num_samples + 1);
+                num_samples++;
+            });
+
+    // Start spinning
+    executor_.spin();
 }
