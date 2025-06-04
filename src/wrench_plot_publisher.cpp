@@ -28,7 +28,7 @@ private:
             + base + "/torque/y "
             + base + "/torque/z &";
 
-        std::system(cmd.c_str());
+        (void)std::system(cmd.c_str());
     }
 };
 

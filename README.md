@@ -28,12 +28,29 @@ Compile the repo:
 
 ## How to use
 
+Launch the planner and the robot model using:
+
+    ros2 launch manipulators planner.launch.py ur_type:=ur5e
+    ros2 launch manipulators planner.launch.py ur_type:=ur10e
+
+You can use the manipulator menu to easily handle the robot:
+
+    ros2 run manipulators manipulator_menu_user
+
 Use the file "admittance_control_params.yaml" to setup the configuration of your robot. The meaning of each param is accurately described in this config file.
 
 The main executable node is "admittance_control_node". To automatically launch it, with your custom configuration, run one of the following command on the terminal:
 
-    ros2 launch manipulators ur5e_planner.launch
-    ros2 launch manipulators ur10e_planner.launch
+    ros2 launch admittance_controller ur5e.launch.py
+    ros2 launch admittance_controller ur10e.launch.py
+
+To run the plotter of the manipulator forces:
+
+    ros2 run admittance_controller wrench_plot_publisher
+
+To run the admittance menu:
+
+    ros2 run admittance_controller admittance_menu_node
 
 ### Optimized compiler
 

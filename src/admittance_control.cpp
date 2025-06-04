@@ -16,7 +16,7 @@ AdmittanceControl::AdmittanceControl(): Node("admittance_control_node")
     // TCP pose subscriber
     auto cb_group_tcp_pose = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     sub_options.callback_group = cb_group_tcp_pose;
-    this->declare_parameter("tcp_pose_topic", manipulator_name+"tcp_pose");
+    this->declare_parameter("tcp_pose_topic", manipulator_name_+"tcp_pose");
     std::string tcp_pose_topic = this->get_parameter("tcp_pose_topic").as_string();
     tcp_pose_sub_ = this->create_subscription<geometry_msgs::msg::Pose>(tcp_pose_topic, 1,
                  std::bind(&AdmittanceControl::tcpPoseCallback, this, std::placeholders::_1), sub_options);
@@ -24,7 +24,7 @@ AdmittanceControl::AdmittanceControl(): Node("admittance_control_node")
     // TCP velocity subscriber
     auto cb_group_tcp_vel = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     sub_options.callback_group = cb_group_tcp_vel;
-    this->declare_parameter("tcp_vel_topic", manipulator_name+"tcp_vel");
+    this->declare_parameter("tcp_vel_topic", manipulator_name_+"tcp_vel");
     std::string tcp_vel_topic = this->get_parameter("tcp_vel_topic").as_string();
     tcp_vel_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(tcp_vel_topic, 1,
                  std::bind(&AdmittanceControl::tcpVelCallback, this, std::placeholders::_1), sub_options);
@@ -40,41 +40,41 @@ AdmittanceControl::AdmittanceControl(): Node("admittance_control_node")
     // Declare and get reference pose topic
     auto cb_group_ref_pose = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     sub_options.callback_group = cb_group_ref_pose;
-    xd_sub_ = this->create_subscription<geometry_msgs::msg::Pose>(manipulator_name+"/adm_xd", 1,
+    xd_sub_ = this->create_subscription<geometry_msgs::msg::Pose>(manipulator_name_+"/adm_xd", 1,
                  std::bind(&AdmittanceControl::admittanceXdCallback, this, std::placeholders::_1), sub_options);
 
     // Subscribers to change admittance
     auto cb_group_adm = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     sub_options.callback_group = cb_group_adm;
-    m_adm_pos_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(manipulator_name + "/m_adm_pos", 1,
+    m_adm_pos_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(manipulator_name_ + "/m_adm_pos", 1,
                         std::bind(&AdmittanceControl::changeMassAdmittanceCallback, this, std::placeholders::_1),sub_options);
-    b_adm_pos_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(manipulator_name + "/b_adm_pos", 1,
+    b_adm_pos_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(manipulator_name_ + "/b_adm_pos", 1,
                         std::bind(&AdmittanceControl::changeDampAdmittanceCallback, this, std::placeholders::_1),sub_options);
-    k_adm_pos_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(manipulator_name + "/k_adm_pos", 1,
+    k_adm_pos_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(manipulator_name_ + "/k_adm_pos", 1,
                         std::bind(&AdmittanceControl::changeStiffAdmittanceCallback, this, std::placeholders::_1),sub_options);
-    m_adm_rot_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(manipulator_name + "/m_adm_rot", 1,
+    m_adm_rot_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(manipulator_name_ + "/m_adm_rot", 1,
                         std::bind(&AdmittanceControl::changeMassRotAdmittanceCallback, this, std::placeholders::_1),sub_options);
-    b_adm_rot_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(manipulator_name + "/b_adm_rot", 1,
+    b_adm_rot_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(manipulator_name_ + "/b_adm_rot", 1,
                         std::bind(&AdmittanceControl::changeDampRotAdmittanceCallback, this, std::placeholders::_1),sub_options);
-    k_adm_rot_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(manipulator_name + "/k_adm_rot", 1,
+    k_adm_rot_sub_ = this->create_subscription<geometry_msgs::msg::Vector3>(manipulator_name_ + "/k_adm_rot", 1,
                         std::bind(&AdmittanceControl::changeStiffRotAdmittanceCallback, this, std::placeholders::_1),sub_options);
     
     // --------- PUBLISHERS -------------
     // Publish EE velocity topic
-    this->declare_parameter("command_topic", manipulator_name+"/cmd_vel");
+    this->declare_parameter("command_topic", manipulator_name_+"/cmd_vel");
     std::string cart_vel_topic = this->get_parameter("command_topic").as_string();
     cartesian_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(cart_vel_topic, 1);
 
     // Publish filtered force-torque sensor topic
-    wf_pub_ = this->create_publisher<geometry_msgs::msg::Wrench>(manipulator_name+"/filtered_wrench", 1);
+    wf_pub_ = this->create_publisher<geometry_msgs::msg::Wrench>(manipulator_name_+"/filtered_wrench", 1);
     
     // --------- SERVICES ----------------
     // Publish service to enable admittance control
-    adm_service_ = this->create_service<std_srvs::srv::SetBool>(manipulator_name+"/enable_admittance",
+    adm_service_ = this->create_service<std_srvs::srv::SetBool>(manipulator_name_+"/enable_admittance",
                    std::bind(&AdmittanceControl::enableAdmittance, this, std::placeholders::_1, std::placeholders::_2));
 
     // Publish service to enable pushing control
-    push_service_ = this->create_service<std_srvs::srv::SetBool>(manipulator_name+"/enable_push_regulation",
+    push_service_ = this->create_service<std_srvs::srv::SetBool>(manipulator_name_+"/enable_push_regulation",
                    std::bind(&AdmittanceControl::enablePush, this, std::placeholders::_1, std::placeholders::_2));
 
     // Create service client to zero the force-torque sensor
@@ -89,7 +89,7 @@ AdmittanceControl::AdmittanceControl(): Node("admittance_control_node")
 
     // --------------- INITIALIZATION----------------
     // Initialize wrench to zero
-    wrench_  = Eigen::VectorXd::Zero(7);
+    wrench_  = Eigen::VectorXd::Zero(6);
     ee_pose_ = Eigen::VectorXd::Zero(7);
     xd_      = Eigen::VectorXd::Zero(7);
     dx_      = Eigen::VectorXd::Zero(6);
@@ -105,7 +105,7 @@ void AdmittanceControl::check_params()
     this->declare_parameter("n_joints", 6);
     n_joints_ = this->get_parameter("n_joints").as_int();
     this->declare_parameter("manipulator_name", "manipulator");
-    std::string manipulator_name = this->get_parameter("manipulator_name").as_string();
+    manipulator_name_ = this->get_parameter("manipulator_name").as_string();
 
     // Declare and get diagonal mass, damping, stiffness
     this->declare_parameter("m_d", std::vector<double>{12.5, 12.5, 12.5, 0.25, 0.25, 0.25});
@@ -140,16 +140,10 @@ void AdmittanceControl::check_params()
     double acc_filter_freq = this->get_parameter("force_cut_freq").as_double();
     loop_rate_             = this->get_parameter("loop_rate").as_double();
 
-    // Fill matrices
-    Eigen::Matrix M_des = Eigen::MatrixXd::Zero(n_joints);
-    Eigen::Matrix K_des = Eigen::MatrixXd::Zero(n_joints);
-    Eigen::Matrix B_des = Eigen::MatrixXd::Zero(n_joints);
-    for (int i = 0; i < n_joints; i++) { M_des(i, i) = m_d[i]; K_des(i, i) = k_d[i]; B_des(i, i) = b_d[i]; }
-
     // Create AdmittanceController object
-    adm_controller_ = std::make_shared<AdmittanceController>(
-        M_des, K_des, B_des,
-        n_joints, 1.0 / loop_rate,
+    adm_controller_ = new AdmittanceController(
+        m_d, k_d, b_d,
+        n_joints_, 1.0 / loop_rate_,
         dz_force, dz_torque,
         kp_pos, kp_rot,
         kp_push, push_force_goal,
@@ -158,53 +152,52 @@ void AdmittanceControl::check_params()
 
     // Init force filter
     force_filter_ = new filters::RCFilter(6, acc_filter_freq, 1.0 / loop_rate_);
-
 }
 
 // ----------------------------- VARIABLE ADMITTANCE --------------------------- //
-void AdmittanceControl::changeMassAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
+void AdmittanceControl::changeMassAdmittanceCallback(const std::shared_ptr<geometry_msgs::msg::Vector3> new_params)
 {
     adm_controller_->setAdmittanceParam(0,0,new_params->x);
     adm_controller_->setAdmittanceParam(0,1,new_params->y);
     adm_controller_->setAdmittanceParam(0,2,new_params->z);
 }
 
-void AdmittanceControl::changeDampAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
+void AdmittanceControl::changeDampAdmittanceCallback(const std::shared_ptr<geometry_msgs::msg::Vector3> new_params)
 {
     adm_controller_->setAdmittanceParam(1,0,new_params->x);
     adm_controller_->setAdmittanceParam(1,1,new_params->y);
     adm_controller_->setAdmittanceParam(1,2,new_params->z);
 }
 
-void AdmittanceControl::changeStiffAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
+void AdmittanceControl::changeStiffAdmittanceCallback(const std::shared_ptr<geometry_msgs::msg::Vector3> new_params)
 {
     adm_controller_->setAdmittanceParam(2,0,new_params->x);
     adm_controller_->setAdmittanceParam(2,1,new_params->y);
     adm_controller_->setAdmittanceParam(2,2,new_params->z);
 }
 
-void AdmittanceControl::changeMassRotAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
+void AdmittanceControl::changeMassRotAdmittanceCallback(const std::shared_ptr<geometry_msgs::msg::Vector3> new_params)
 {
     adm_controller_->setAdmittanceParam(3,0,new_params->x);
     adm_controller_->setAdmittanceParam(3,1,new_params->y);
     adm_controller_->setAdmittanceParam(3,2,new_params->z);
 }
 
-void AdmittanceControl::changeDampRotAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
+void AdmittanceControl::changeDampRotAdmittanceCallback(const std::shared_ptr<geometry_msgs::msg::Vector3> new_params)
 {
     adm_controller_->setAdmittanceParam(4,0,new_params->x);
     adm_controller_->setAdmittanceParam(4,1,new_params->y);
     adm_controller_->setAdmittanceParam(4,2,new_params->z);
 }
 
-void AdmittanceControl::changeStiffRotAdmittanceCallback(const geometry_msgs::Vector3::ConstPtr& new_params)
+void AdmittanceControl::changeStiffRotAdmittanceCallback(const std::shared_ptr<geometry_msgs::msg::Vector3> new_params)
 {
     adm_controller_->setAdmittanceParam(5,0,new_params->x);
     adm_controller_->setAdmittanceParam(5,1,new_params->y);
     adm_controller_->setAdmittanceParam(5,2,new_params->z);
 }
 
-// --------------------- QUATERNIONS HANDLER -------------------
+// --------------------- QUATERNIONS HANDLER ------------------- //
 // Conversion from radians euler angles to quaternion
 Eigen::Quaterniond AdmittanceControl::quaternion_from_euler(const double& roll, const double& pitch, const double& yaw)
 {
@@ -247,7 +240,7 @@ Eigen::Vector3d AdmittanceControl::euler_from_quaternion(const Eigen::Quaternion
     return euler_angles;
 }
 
-// --------------------------- ROBOT STATE CALLBACKS -------------------------------
+// --------------------------- ROBOT STATE CALLBACKS ------------------------------- //
 
 // Robot tcp pose callback
 void AdmittanceControl::tcpPoseCallback(const std::shared_ptr<geometry_msgs::msg::Pose> msg)
@@ -269,16 +262,16 @@ void AdmittanceControl::tcpPoseCallback(const std::shared_ptr<geometry_msgs::msg
 // Joint state callback
 void AdmittanceControl::jointCallback(const std::shared_ptr<sensor_msgs::msg::JointState> js)
 {
-    q_(0) = msg->position[0];
-    q_(1) = msg->position[1];
-    q_(2) = msg->position[2];
-    q_(3) = msg->position[3];
-    q_(4) = msg->position[4];
-    q_(5) = msg->position[5];
+    q_(0) = js->position[0];
+    q_(1) = js->position[1];
+    q_(2) = js->position[2];
+    q_(3) = js->position[3];
+    q_(4) = js->position[4];
+    q_(5) = js->position[5];
 }
 
 // Robot twist callback
-void AdmittanceControl::tcpTwistCallback(const std::shared_ptr<geometry_msgs::msg::Twist> msg)
+void AdmittanceControl::tcpVelCallback(const std::shared_ptr<geometry_msgs::msg::Twist> msg)
 {
     dx_(0) = msg->linear.x;
     dx_(1) = msg->linear.y;
@@ -288,7 +281,7 @@ void AdmittanceControl::tcpTwistCallback(const std::shared_ptr<geometry_msgs::ms
     dx_(5) = msg->angular.z;
 }
 
-// ---------------------------------- SENSORS -------------------------------- 
+// ---------------------------------- SENSORS -------------------------------- //
 
 // Callback function for force sensor data
 void AdmittanceControl::forceSensorCallback(const std::shared_ptr<geometry_msgs::msg::Wrench> w)
@@ -306,7 +299,7 @@ Eigen::VectorXd AdmittanceControl::wrenchFilter(const Eigen::VectorXd& wrench)
 {
     Eigen::VectorXd filtered_wrench = force_filter_->filter(wrench);
 
-    geometry_msgs::Wrench wrench_msg;
+    geometry_msgs::msg::Wrench wrench_msg;
     wrench_msg.force.x  = filtered_wrench(0);
     wrench_msg.force.y  = filtered_wrench(1);
     wrench_msg.force.z  = filtered_wrench(2);
@@ -314,52 +307,81 @@ Eigen::VectorXd AdmittanceControl::wrenchFilter(const Eigen::VectorXd& wrench)
     wrench_msg.torque.y = filtered_wrench(4);
     wrench_msg.torque.z = filtered_wrench(5);
 
-    wf_pub_.publish(wrench_msg);
+    wf_pub_->publish(wrench_msg);
 
     return filtered_wrench;
 }
 
-// ----------------------------- SETPOINT UPDATE -----------------------------
+// ----------------------------- SETPOINT UPDATE ----------------------------- //
 void AdmittanceControl::admittanceXdCallback(const std::shared_ptr<geometry_msgs::msg::Pose> msg)
 {
-    xd_(0) = p->position.x;
-    xd_(1) = p->position.y;
-    xd_(2) = p->position.z;
+    xd_(0) = msg->position.x;
+    xd_(1) = msg->position.y;
+    xd_(2) = msg->position.z;
     // Eigen::Vector3d x_rpy = euler_from_quaternion(msg->pose.orientation);
     // xd_(3) = x_rpy(0);
     // xd_(4) = x_rpy(1);
     // xd_(5) = x_rpy(2);
-    xd_(3) = p->orientation.x;
-    xd_(4) = p->orientation.y;
-    xd_(5) = p->orientation.z;
-    xd_(6) = p->orientation.w; 
+    xd_(3) = msg->orientation.x;
+    xd_(4) = msg->orientation.y;
+    xd_(5) = msg->orientation.z;
+    xd_(6) = msg->orientation.w; 
 }
 
-// ----------------------------- SERVICE CALLBACKS -----------------------------
+// ----------------------------- SERVICE CALLBACKS ----------------------------- //
 // Service callback to enable or disable admittance control
 void AdmittanceControl::enableAdmittance(const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
                                          std::shared_ptr<std_srvs::srv::SetBool::Response>      response)
 {
-    enable_admittance_ = request->data;  // Assuming you have a flag `enable_admittance_`
-    RCLCPP_INFO(this->get_logger(), "Admittance control %s", enable_admittance_ ? "ENABLED" : "DISABLED");
+    if (request->data)
+    {
+        // Enable admittance control
+        adm_controller_->enableAdmittance();
+
+        // Set the desired pose equal to the current pose
+        xd_ = ee_pose_;
+    }
+    else
+    {
+        // Disable admittance control
+        adm_controller_->disableAdmittance();
+
+        // Set the desired pose equal to the current pose
+        xd_ = ee_pose_;
+    }
+    RCLCPP_INFO(this->get_logger(), "Admittance control %s", request->data ? "ENABLED" : "DISABLED");
 
     response->success = true;
-    response->message = enable_admittance_ ? "Admittance control enabled" : "Admittance control disabled";
+    response->message = request->data ? "Admittance control enabled" : "Admittance control disabled";
 }
 
 // Service callback to enable or disable push regulation
 void AdmittanceControl::enablePush(const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
                                    std::shared_ptr<std_srvs::srv::SetBool::Response>      response)
 {
-    enable_push_ = request->data;  // Assuming you have a flag `enable_push_`
-    RCLCPP_INFO(this->get_logger(), "Push regulation %s", enable_push_ ? "ENABLED" : "DISABLED");
+    if (request->data)
+    {
+        // Enable push regulation
+        adm_controller_->enablePush();
+        
+        // Set the desired pose equal to the current pose
+        xd_ = ee_pose_;
+    }
+    else
+    {
+        // Disable push regulation
+        adm_controller_->disablePush();
+
+        // Set the desired pose equal to the current pose
+        xd_ = ee_pose_;
+    }
+    RCLCPP_INFO(this->get_logger(), "Push regulation %s", request->data ? "ENABLED" : "DISABLED");
 
     response->success = true;
-    response->message = enable_push_ ? "Push regulation enabled" : "Push regulation disabled";
+    response->message = request->data ? "Push regulation enabled" : "Push regulation disabled";
 }
 
-
-// ----------------------------- MAIN LOOP -----------------------------
+// ----------------------------- MAIN LOOP ---------------------------- //
 // Main loop to compute and publish joint velocities
 void AdmittanceControl::computeAdmittanceControl()
 {   
@@ -367,24 +389,23 @@ void AdmittanceControl::computeAdmittanceControl()
     Eigen::VectorXd filtered_wrench = wrenchFilter(wrench_);
 
     // Compute the desired end-effector speed according to the admittance controller
-    Eigen::VectorXd dx_ = adm_controller_->computeEESpeed(filtered_wrench,xd_,ee_pose_,dx_,dx_des_,ddx_des_);
+    Eigen::VectorXd dx_cmd = adm_controller_->computeEESpeed(filtered_wrench,xd_,ee_pose_,dx_,dx_des_,ddx_des_);
 
     // Publish the ee speed 
     geometry_msgs::msg::Twist cartesian_vel;
-    cartesian_vel.linear.x  = dx_(0);
-    cartesian_vel.linear.y  = dx_(1);
-    cartesian_vel.linear.z  = dx_(2);
-    cartesian_vel.angular.x = dx_(3);
-    cartesian_vel.angular.y = dx_(4);
-    cartesian_vel.angular.z = dx_(5);
+    cartesian_vel.linear.x  = dx_cmd(0);
+    cartesian_vel.linear.y  = dx_cmd(1);
+    cartesian_vel.linear.z  = dx_cmd(2);
+    cartesian_vel.angular.x = dx_cmd(3);
+    cartesian_vel.angular.y = dx_cmd(4);
+    cartesian_vel.angular.z = dx_cmd(5);
     cartesian_vel_pub_->publish(cartesian_vel);
 }
 
-// ------------------------------ SPINNER -----------------------------
-void ManipulatorPlannerNode::shutdown_handler()
+// ------------------------------ SPINNER ----------------------------- //
+void AdmittanceControl::shutdown_handler()
 {
     RCLCPP_INFO(get_logger(), "Admittance controller mean time: %f s", spinner_mean_);
-    rclcpp::shutdown();
 }
 
 void AdmittanceControl::spinner()
@@ -392,10 +413,13 @@ void AdmittanceControl::spinner()
     // Add the node to the executor
     executor_.add_node(shared_from_this());
 
+    // Create a steady clock to measure time
+	rclcpp::Clock steady_clock(RCL_STEADY_TIME);
+
     // Create timer callback with specified frequency (loop_rate_ in Hz)
     timer_ = this->create_wall_timer(
         std::chrono::duration<double>(1.0 / loop_rate_),  // period in seconds
-        [this]() {
+        [this, &steady_clock]() {
 
                 // This is the main loop for the node
                 auto start_time = steady_clock.now();
@@ -409,4 +433,7 @@ void AdmittanceControl::spinner()
 
     // Start spinning
     executor_.spin();
+
+    // Shutdown the executor
+    rclcpp::shutdown();
 }

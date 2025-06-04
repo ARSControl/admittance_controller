@@ -10,6 +10,8 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
+# ---------------- SET PKG DEPENDENCIES ----------------
+
 # Dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -67,6 +69,7 @@ install(TARGETS
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 # -------------- WRENCH PLOTTER --------------
@@ -76,7 +79,12 @@ install(TARGETS
   wrench_plot_publisher
   DESTINATION lib/${PROJECT_NAME})
 
+# ------------ ADMITTANCE MENU ------------
+add_executable(admittance_menu_node src/admittance_menu_node.cpp)
+ament_target_dependencies(admittance_menu_node rclcpp std_srvs std_msgs geometry_msgs)
+install(TARGETS admittance_menu_node DESTINATION lib/${PROJECT_NAME})
 
+# -------------- INSTALL DIRECTORIES ------------
 # Install headers
 install(DIRECTORY include/
   DESTINATION include
@@ -88,6 +96,8 @@ install(DIRECTORY
   config
   DESTINATION share/${PROJECT_NAME}
 )
+
+# ---------------- EXPORT DEPENDENCIES --------------
 
 # Export
 ament_export_targets(export_${PROJECT_NAME})
