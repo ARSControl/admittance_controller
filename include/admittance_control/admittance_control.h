@@ -43,6 +43,8 @@ private:
 	void changeDampRotAdmittanceCallback(const std::shared_ptr<geometry_msgs::msg::Vector3> msg);
 	void changeStiffRotAdmittanceCallback(const std::shared_ptr<geometry_msgs::msg::Vector3> msg);
 
+	void updateParamOnWrenchError(const Eigen::VectorXd& wrench, const double& reference_force);
+
 	// ----- Utility Functions -----
 	void check_params();
 	void shutdown_handler();
@@ -59,6 +61,7 @@ private:
     std::string manipulator_name_;
     double loop_rate_;
 	int n_joints_;
+	double push_force_goal_;
 
 	// ------ Global Variables -----
 	Eigen::VectorXd wrench_;  // Current wrench from the force-torque sensor
@@ -76,6 +79,14 @@ private:
 	// ----- Admittance Controller -----
 	AdmittanceController* adm_controller_;
 	filters::RCFilter *force_filter_;
+
+	// ----- Admittance Parameters -----
+	std::vector<double> m_d;
+	std::vector<double> b_d;
+	std::vector<double> k_d;
+	std::vector<double> m_d_block;
+	std::vector<double> b_d_block;
+	std::vector<double> k_d_block;
 
     // ----- ROS Interfaces -----
     // Services

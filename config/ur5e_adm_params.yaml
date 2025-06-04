@@ -12,6 +12,12 @@ admittance_control_node:
 
     b_d:                [25.0, 25.0, 25.0,  0.5,  0.5,  0.5]  # Diagonal damping coefficients (Ns/m)
 
+    m_d_block:          [10.0, 10.0, 10.0,  0.1,  0.1,  0.1]  # Diagonal mass    coefficients (kg)   for the block
+
+    k_d_block:          [20.0, 20.0, 20.0,  1.0,  1.0,  1.0]  # Diagonal spring  coefficients (N/m)  for the block
+
+    b_d_block:          [30.0, 30.0, 30.0,  0.5,  0.5,  0.5]  # Diagonal damping coefficients (Ns/m)  for the block
+
     loop_rate:          500.0                                 # Hz
 
     dz_force:           5.0                                   # force  dead zone

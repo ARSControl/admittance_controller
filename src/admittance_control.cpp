@@ -108,12 +108,19 @@ void AdmittanceControl::check_params()
     manipulator_name_ = this->get_parameter("manipulator_name").as_string();
 
     // Declare and get diagonal mass, damping, stiffness
-    this->declare_parameter("m_d", std::vector<double>{12.5, 12.5, 12.5, 0.25, 0.25, 0.25});
-    this->declare_parameter("k_d", std::vector<double>{0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
-    this->declare_parameter("b_d", std::vector<double>{25.0, 25.0, 25.0, 1.5, 1.5, 1.5});
-    std::vector<double> m_d = this->get_parameter("m_d").as_double_array();
-    std::vector<double> k_d = this->get_parameter("k_d").as_double_array();
-    std::vector<double> b_d = this->get_parameter("b_d").as_double_array();
+    this->declare_parameter("m_d", std::vector<double>{ 5.0,  5.0,  5.0, 0.1, 0.1, 0.1});
+    this->declare_parameter("k_d", std::vector<double>{50.0, 50.0, 50.0, 1.0, 1.0, 1.0});
+    this->declare_parameter("b_d", std::vector<double>{25.0, 25.0, 25.0, 0.5, 0.5, 0.5});
+    m_d = this->get_parameter("m_d").as_double_array();
+    k_d = this->get_parameter("k_d").as_double_array();
+    b_d = this->get_parameter("b_d").as_double_array();
+
+    this->declare_parameter("m_d_block", std::vector<double>{ 5.0,  5.0,  5.0, 0.1, 0.1, 0.1});
+    this->declare_parameter("k_d_block", std::vector<double>{50.0, 50.0, 50.0, 1.0, 1.0, 1.0});
+    this->declare_parameter("b_d_block", std::vector<double>{25.0, 25.0, 25.0, 0.5, 0.5, 0.5});
+    m_d_block = this->get_parameter("m_d_block").as_double_array();
+    k_d_block = this->get_parameter("k_d_block").as_double_array();
+    b_d_block = this->get_parameter("b_d_block").as_double_array();
 
     // Declare and get controller gains
     this->declare_parameter("kp_pos", 0.0);
@@ -125,7 +132,7 @@ void AdmittanceControl::check_params()
     double kp_pos = this->get_parameter("kp_pos").as_double();
     double kp_rot = this->get_parameter("kp_rot").as_double();
     double kp_push = this->get_parameter("kp_push").as_double();
-    double push_force_goal = this->get_parameter("push_force_goal").as_double();
+    push_force_goal_ = this->get_parameter("push_force_goal").as_double();
     double safe_push_dist = this->get_parameter("safe_push_dist").as_double();
 
     // Declare and get dead zone thresholds
@@ -146,7 +153,7 @@ void AdmittanceControl::check_params()
         n_joints_, 1.0 / loop_rate_,
         dz_force, dz_torque,
         kp_pos, kp_rot,
-        kp_push, push_force_goal,
+        kp_push, push_force_goal_,
         safe_push_dist, acc_filter_freq
     );
 
@@ -195,6 +202,29 @@ void AdmittanceControl::changeStiffRotAdmittanceCallback(const std::shared_ptr<g
     adm_controller_->setAdmittanceParam(5,0,new_params->x);
     adm_controller_->setAdmittanceParam(5,1,new_params->y);
     adm_controller_->setAdmittanceParam(5,2,new_params->z);
+}
+
+// ----------------------------- VARIABLE PUSHING ADMITTANCE CONTROL --------------------------- //
+void AdmittanceControl::updateParamOnWrenchError(const Eigen::VectorXd& wrench, const double& reference_force)
+{
+    // Adjust this value to control the sensitivity of the update
+    double lambda = 1.0;
+
+    // Iterate over the force components to change the desired admittance mass 
+    for (unsigned int k = 0; k < 3; k++)
+    {
+        // Calculate the difference between the current force and the reference force
+        double delta_force = std::abs(std::abs(wrench(k)) - std::abs(reference_force));
+        // Update the mass based on the difference
+        double mass = (m_d_block[k] - m_d[k]) * std::exp(-lambda * delta_force) + m_d[0];
+        adm_controller_->setAdmittanceParam(0,k,mass);
+        // Update the damping based on the difference
+        double damping = (b_d_block[k] - b_d[k]) * std::exp(-lambda * delta_force) + b_d[0];
+        adm_controller_->setAdmittanceParam(1,k,damping);
+        // Update the stiffness based on the difference
+        double stiffness = (k_d[k] - k_d_block[k]) *(1 - std::exp(-lambda * delta_force)) + k_d_block[0];
+        adm_controller_->setAdmittanceParam(2,k,stiffness);
+    } 
 }
 
 // --------------------- QUATERNIONS HANDLER ------------------- //
@@ -387,6 +417,9 @@ void AdmittanceControl::computeAdmittanceControl()
 {   
     // Filter wrench measurements
     Eigen::VectorXd filtered_wrench = wrenchFilter(wrench_);
+
+    // Adapt parameters if the force error is not zero
+    // adm_controller_->updateParamOnWrenchError(filtered_wrench, push_force_goal_);
 
     // Compute the desired end-effector speed according to the admittance controller
     Eigen::VectorXd dx_cmd = adm_controller_->computeEESpeed(filtered_wrench,xd_,ee_pose_,dx_,dx_des_,ddx_des_);
