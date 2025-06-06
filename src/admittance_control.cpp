@@ -7,11 +7,7 @@ AdmittanceControl::AdmittanceControl(): Node("admittance_control_node")
     check_params();
 
     // --------- SUBSCRIBERS ------------
-    // Joint state subscriber
-    auto cb_group_js = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
-    rclcpp::SubscriptionOptions sub_options; sub_options.callback_group = cb_group_js;
-    joint_sub_ = this->create_subscription<sensor_msgs::msg::JointState>("/joint_states",1,
-                 std::bind(&AdmittanceControl::jointCallback, this, std::placeholders::_1), sub_options);
+    rclcpp::SubscriptionOptions sub_options;
 
     // TCP pose subscriber
     auto cb_group_tcp_pose = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
@@ -95,7 +91,6 @@ AdmittanceControl::AdmittanceControl(): Node("admittance_control_node")
     dx_      = Eigen::VectorXd::Zero(6);
     dx_des_  = Eigen::VectorXd::Zero(6);
     ddx_des_ = Eigen::VectorXd::Zero(6);
-    q_       = Eigen::VectorXd::Zero(n_joints_);
 }
 
 // Node params update
@@ -287,17 +282,6 @@ void AdmittanceControl::tcpPoseCallback(const std::shared_ptr<geometry_msgs::msg
     ee_pose_(4) = msg->orientation.y;
     ee_pose_(5) = msg->orientation.z;
     ee_pose_(6) = msg->orientation.w;
-}
-
-// Joint state callback
-void AdmittanceControl::jointCallback(const std::shared_ptr<sensor_msgs::msg::JointState> js)
-{
-    q_(0) = js->position[0];
-    q_(1) = js->position[1];
-    q_(2) = js->position[2];
-    q_(3) = js->position[3];
-    q_(4) = js->position[4];
-    q_(5) = js->position[5];
 }
 
 // Robot twist callback

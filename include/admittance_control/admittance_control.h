@@ -8,7 +8,6 @@
 #include <geometry_msgs/msg/twist.hpp>
 #include <geometry_msgs/msg/wrench.hpp>
 #include <geometry_msgs/msg/vector3.hpp>
-#include <sensor_msgs/msg/joint_state.hpp>
 #include <eigen3/Eigen/Dense>
 #include <admittance_controller/admittance_controller.h>
 
@@ -31,7 +30,6 @@ private:
 					
 	void admittanceXdCallback(const std::shared_ptr<geometry_msgs::msg::Pose> msg);
 	void forceSensorCallback(const std::shared_ptr<geometry_msgs::msg::Wrench> w);
-	void jointCallback(const std::shared_ptr<sensor_msgs::msg::JointState> msg);
 	void tcpPoseCallback(const std::shared_ptr<geometry_msgs::msg::Pose> msg);
 	void tcpVelCallback(const std::shared_ptr<geometry_msgs::msg::Twist> msg);
 
@@ -70,7 +68,6 @@ private:
 	Eigen::VectorXd dx_;      // Current end-effector velocity
 	Eigen::VectorXd dx_des_;  // Desired end-effector velocity
 	Eigen::VectorXd ddx_des_; // Desired end-effector acceleration
-	Eigen::VectorXd q_;       // Current joint positions
 
 	// ----- Spinner Variables -----
 	double spinner_mean_ = 0.0; 			// Mean time for the spinner loop
@@ -97,7 +94,6 @@ private:
 	rclcpp::Publisher<geometry_msgs::msg::Wrench>::SharedPtr wf_pub_;
 	rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cartesian_vel_pub_;
 	// Subscribers
-	rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr 	joint_sub_;
 	rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr 	 	ee_pose_sub_;
 	rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr 	 	xd_sub_;
 	rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr 	 	tcp_pose_sub_;
