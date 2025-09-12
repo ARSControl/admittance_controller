@@ -4,7 +4,7 @@
 AdmittanceController::AdmittanceController( const std::vector<double>& m_des,
                                             const std::vector<double>& k_des,
                                             const std::vector<double>& b_des, 
-                                            const  int&   n_joints, const double& ts,
+                                            const int&    n_joints, const double& ts,
                                             const double& dz_force, const double& dz_torque,
                                             const double& kp_pos,   const double& kp_rot,
                                             const double& kp_push,  const double& push_force_goal,
@@ -99,12 +99,12 @@ Eigen::VectorXd AdmittanceController::pushRegulation(const Eigen::VectorXd &wren
 }
 
 // Method to compute joints velocities for kdl mode
-Eigen::VectorXd AdmittanceController::computeEESpeed(     Eigen::VectorXd &wrench,
-                                                    const Eigen::VectorXd &xd,
-                                                    const Eigen::VectorXd &ee_pose,
-                                                    const Eigen::VectorXd &dx,
-                                                    const Eigen::VectorXd &dx_des,
-                                                    const Eigen::VectorXd &ddx_des)
+Eigen::VectorXd AdmittanceController::computeEESpeed(      Eigen::VectorXd &wrench,
+                                                     const Eigen::VectorXd &xd,
+                                                     const Eigen::VectorXd &ee_pose,
+                                                     const Eigen::VectorXd &dx,
+                                                     const Eigen::VectorXd &dx_des,
+                                                     const Eigen::VectorXd &ddx_des)
 {
     // Initialize joints velocity vector as zero
     Eigen::VectorXd dx_res = Eigen::VectorXd::Zero(6);

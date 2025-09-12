@@ -6,24 +6,24 @@ admittance_control_node:
 
     n_joints:           6                                     # Number of joints of the manipulator, default 6
 
-    m_d:                [5.0,   5.0,  5.0,  1.0,  1.0,  1.0]  # Diagonal mass    coefficients (kg)
+    m_d:                [10.0, 10.0, 10.0,  5.0,  5.0,  5.0]  # Diagonal mass    coefficients (kg)
 
-    k_d:                [40.0, 40.0, 40.0,  1.0,  1.0,  1.0]  # Diagonal spring  coefficients (N/m)
+    k_d:                [40.0, 40.0, 40.0,  5.0,  5.0,  5.0]  # Diagonal spring  coefficients (N/m)
 
-    b_d:                [25.0, 25.0, 25.0,  1.0,  1.0,  1.0]  # Diagonal damping coefficients (Ns/m)
+    b_d:                [25.0, 25.0, 25.0,  5.0,  5.0,  5.0]  # Diagonal damping coefficients (Ns/m)
 
-    m_d_block:          [10.0, 10.0, 10.0,  1.0,  1.0,  1.0]  # Diagonal mass    coefficients (kg)   for the block
+    m_d_block:          [15.0, 15.0, 15.0,  5.0,  5.0,  5.0]  # Diagonal mass    coefficients (kg)   for the block
 
-    k_d_block:          [20.0, 20.0, 20.0,  1.0,  1.0,  1.0]  # Diagonal spring  coefficients (N/m)  for the block
+    k_d_block:          [20.0, 20.0, 20.0,  5.0,  5.0,  5.0]  # Diagonal spring  coefficients (N/m)  for the block
 
-    b_d_block:          [40.0, 40.0, 40.0,  1.0,  1.0,  1.0]  # Diagonal damping coefficients (Ns/m)  for the block
+    b_d_block:          [40.0, 40.0, 40.0,  5.0,  5.0,  5.0]  # Diagonal damping coefficients (Ns/m) for the block
 
     loop_rate:          500.0                                 # Hz
 
     dz_force:           4.0                                   # force  dead zone
     dz_torque:          2.0                                   # torque dead zone
 
-    force_cut_freq:     100.0                                 # cut out frequence for wrench RC filter
+    force_cut_freq:     100.0                                 # cut out frequence for wrench RC filter, default "50.0"
 
     kp_pos:             0.0                                   # kp for position compensation
     kp_rot:             0.0                                   # kp for rotation compensation
@@ -34,13 +34,15 @@ admittance_control_node:
                                                               #   or "/ur_rtde/controllers/cartesian_velocity_controller/command"
 
     tcp_pose_topic:     "manipulator/tcp_pose"                # topic to publish the TCP pose, default "manipulator/tcp_pose"
+                                                              #   or "mobile_manipulator/tcp_pose" if the manipulator is on a mobile base
     
     tcp_vel_topic:      "manipulator/cmd_vel"                 # topic to publish the TCP velocity, default "manipulator/tcp_vel"
+                                                              #   or "manipulator/cmd_vel" if you want to assume no actuation delays
 
     zero_ft_topic:      "/ur_rtde/zeroFTSensor"               # server to reset the force/torque sensor, default
                                                               #   "/ur_rtde/zeroFTSensor"
    
-    kp_push:            0.01                                 # Proportional gain for goal force regulation in the pushing task
+    kp_push:            0.01                                  # Proportional gain for goal force regulation in the pushing task
 
     push_force_goal:    10.0                                  # Force goal to be regulated in the pushing task
 
