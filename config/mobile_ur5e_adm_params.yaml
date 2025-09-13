@@ -2,7 +2,7 @@
 admittance_control_node:
   ros__parameters:
 
-    manipulator_name:   "manipulator"                         # Name of the manipulator, default "manipulator" (to match the planner topic names)
+    manipulator_name:   "mobile_manipulator"                  # Name of the manipulator, default "manipulator" (to match the planner topic names)
 
     n_joints:           6                                     # Number of joints of the manipulator, default 6
 

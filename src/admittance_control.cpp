@@ -56,6 +56,7 @@ AdmittanceControl::AdmittanceControl(): Node("admittance_control_node")
                         std::bind(&AdmittanceControl::changeStiffRotAdmittanceCallback, this, std::placeholders::_1),sub_options);
     
     // --------- PUBLISHERS -------------
+    
     // Publish EE velocity topic
     this->declare_parameter("command_topic", manipulator_name_+"/cmd_vel");
     std::string cart_vel_topic = this->get_parameter("command_topic").as_string();
