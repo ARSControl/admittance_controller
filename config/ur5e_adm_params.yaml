@@ -6,17 +6,17 @@ admittance_control_node:
 
     n_joints:           6                                     # Number of joints of the manipulator, default 6
 
-    m_d:                [10.0, 10.0, 10.0,  5.0,  5.0,  5.0]  # Diagonal mass    coefficients (kg)
+    m_d:                [10.0, 10.0, 10.0,  2.0,  2.0,  2.0]  # Diagonal mass    coefficients (kg)
 
-    k_d:                [40.0, 40.0, 40.0,  5.0,  5.0,  5.0]  # Diagonal spring  coefficients (N/m)
+    k_d:                [40.0, 40.0, 40.0,  2.0,  2.0,  2.0]  # Diagonal spring  coefficients (N/m)
 
-    b_d:                [25.0, 25.0, 25.0,  5.0,  5.0,  5.0]  # Diagonal damping coefficients (Ns/m)
+    b_d:                [25.0, 25.0, 25.0,  2.0,  2.0,  2.0]  # Diagonal damping coefficients (Ns/m)
 
-    m_d_block:          [15.0, 15.0, 15.0,  5.0,  5.0,  5.0]  # Diagonal mass    coefficients (kg)   for the block
+    m_d_block:          [15.0, 15.0, 15.0,  2.0,  2.0,  2.0]  # Diagonal mass    coefficients (kg)   for the block
 
-    k_d_block:          [20.0, 20.0, 20.0,  5.0,  5.0,  5.0]  # Diagonal spring  coefficients (N/m)  for the block
+    k_d_block:          [20.0, 20.0, 20.0,  2.0,  2.0,  2.0]  # Diagonal spring  coefficients (N/m)  for the block
 
-    b_d_block:          [40.0, 40.0, 40.0,  5.0,  5.0,  5.0]  # Diagonal damping coefficients (Ns/m) for the block
+    b_d_block:          [40.0, 40.0, 40.0,  2.0,  2.0,  2.0]  # Diagonal damping coefficients (Ns/m) for the block
 
     loop_rate:          500.0                                 # Hz
 
@@ -28,7 +28,7 @@ admittance_control_node:
     kp_pos:             0.0                                   # kp for position compensation
     kp_rot:             0.0                                   # kp for rotation compensation
 
-    force_feed_topic:   "/ur_rtde/ft_sensor"                     # force sensor reading topic, default "/ur_rtde/ft_sensor", or "/ati/wrench/arm"
+    force_feed_topic:   "/ur_rtde/ft_sensor"                  # force sensor reading topic, default "/ur_rtde/ft_sensor", or "/ati/wrench/arm"
 
     command_topic:      "manipulator/cmd_vel"                 # vel command to the manipulator's joints, default "manipulator/cmd_vel"
                                                               #   or "/ur_rtde/controllers/cartesian_velocity_controller/command"
@@ -44,6 +44,6 @@ admittance_control_node:
    
     kp_push:            0.001                                 # Proportional gain for goal force regulation in the pushing task
 
-    push_force_goal:    5.0                                   # Force goal to be regulated in the pushing task
+    push_force_goal:    6.0                                   # Force goal to be regulated in the pushing task
 
     safe_push_dist:     0.20                                  # Safety distance for the force regulation in the pushing task
