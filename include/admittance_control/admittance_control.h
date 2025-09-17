@@ -5,6 +5,7 @@
 #include <std_srvs/srv/set_bool.hpp>
 #include <std_srvs/srv/trigger.hpp>
 #include <geometry_msgs/msg/pose.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <geometry_msgs/msg/wrench.hpp>
 #include <geometry_msgs/msg/vector3.hpp>
@@ -30,7 +31,7 @@ private:
 					
 	void admittanceXdCallback(const std::shared_ptr<geometry_msgs::msg::Pose> msg);
 	void forceSensorCallback(const std::shared_ptr<geometry_msgs::msg::Wrench> w);
-	void tcpPoseCallback(const std::shared_ptr<geometry_msgs::msg::Pose> msg);
+	void tcpPoseCallback(const std::shared_ptr<geometry_msgs::msg::PoseStamped> msg);
 	void tcpVelCallback(const std::shared_ptr<geometry_msgs::msg::Twist> msg);
 
 	// ----- Admittance Change Callbacks -----
@@ -96,7 +97,7 @@ private:
 	// Subscribers
 	rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr 	 	ee_pose_sub_;
 	rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr 	 	xd_sub_;
-	rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr 	 	tcp_pose_sub_;
+	rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr tcp_pose_sub_;
 	rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr 	 	tcp_vel_sub_;
 	rclcpp::Subscription<geometry_msgs::msg::Wrench>::SharedPtr  	force_sub_;
 	rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr 	m_adm_pos_sub_;

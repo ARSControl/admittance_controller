@@ -14,7 +14,7 @@ AdmittanceControl::AdmittanceControl(): Node("admittance_control_node")
     sub_options.callback_group = cb_group_tcp_pose;
     this->declare_parameter("tcp_pose_topic", manipulator_name_+"tcp_pose");
     std::string tcp_pose_topic = this->get_parameter("tcp_pose_topic").as_string();
-    tcp_pose_sub_ = this->create_subscription<geometry_msgs::msg::Pose>(tcp_pose_topic, 1,
+    tcp_pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(tcp_pose_topic, 1,
                  std::bind(&AdmittanceControl::tcpPoseCallback, this, std::placeholders::_1), sub_options);
 
     // TCP velocity subscriber
@@ -269,20 +269,20 @@ Eigen::Vector3d AdmittanceControl::euler_from_quaternion(const Eigen::Quaternion
 // --------------------------- ROBOT STATE CALLBACKS ------------------------------- //
 
 // Robot tcp pose callback
-void AdmittanceControl::tcpPoseCallback(const std::shared_ptr<geometry_msgs::msg::Pose> msg)
+void AdmittanceControl::tcpPoseCallback(const std::shared_ptr<geometry_msgs::msg::PoseStamped> msg)
 {
     // Update end-effector pose
-    ee_pose_(0) = msg->position.x;
-    ee_pose_(1) = msg->position.y;
-    ee_pose_(2) = msg->position.z;
+    ee_pose_(0) = msg->pose.position.x;
+    ee_pose_(1) = msg->pose.position.y;
+    ee_pose_(2) = msg->pose.position.z;
     // Eigen::Vector3d ee_pose_rpy = euler_from_quaternion(msg->pose.orientation);
     // ee_pose_(3) = ee_pose_rpy(0);
     // ee_pose_(4) = ee_pose_rpy(1);
     // ee_pose_(5) = ee_pose_rpy(2);
-    ee_pose_(3) = msg->orientation.x;
-    ee_pose_(4) = msg->orientation.y;
-    ee_pose_(5) = msg->orientation.z;
-    ee_pose_(6) = msg->orientation.w;
+    ee_pose_(3) = msg->pose.orientation.x;
+    ee_pose_(4) = msg->pose.orientation.y;
+    ee_pose_(5) = msg->pose.orientation.z;
+    ee_pose_(6) = msg->pose.orientation.w;
 }
 
 // Robot twist callback
