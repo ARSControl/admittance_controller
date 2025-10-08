@@ -26,10 +26,14 @@ private:
     void enableAdmittance(const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
                           std::shared_ptr<std_srvs::srv::SetBool::Response> response);
 
+    void setAdmittanceVelMode(const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+                              std::shared_ptr<std_srvs::srv::SetBool::Response> response);
+
     void enablePush(const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
                     std::shared_ptr<std_srvs::srv::SetBool::Response> response);
 					
 	void admittanceXdCallback(const std::shared_ptr<geometry_msgs::msg::Pose> msg);
+    void admittanceVdCallback(const std::shared_ptr<geometry_msgs::msg::Twist> msg); //Callback for velocity setpoint
 	void forceSensorCallback(const std::shared_ptr<geometry_msgs::msg::Wrench> w);
 	void tcpPoseCallback(const std::shared_ptr<geometry_msgs::msg::PoseStamped> msg);
 	void tcpVelCallback(const std::shared_ptr<geometry_msgs::msg::Twist> msg);
@@ -62,6 +66,8 @@ private:
 	int n_joints_;
 	double push_force_goal_;
 
+    bool vel_mode_ = false; // true -> velocity mode, false -> position mode (default behaviour)
+
 	// ------ Global Variables -----
 	Eigen::VectorXd wrench_;  // Current wrench from the force-torque sensor
 	Eigen::VectorXd ee_pose_; // Current end-effector pose
@@ -89,6 +95,8 @@ private:
     // ----- ROS Interfaces -----
     // Services
     rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr adm_service_;
+    rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr adm_vel_mode_service_;
+
     rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr push_service_;
     rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr ft_client_;
 	// Publishers
@@ -97,6 +105,7 @@ private:
 	// Subscribers
 	rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr 	 	ee_pose_sub_;
 	rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr 	 	xd_sub_;
+    rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr 	 	vd_sub_;
 	rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr tcp_pose_sub_;
 	rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr 	 	tcp_vel_sub_;
 	rclcpp::Subscription<geometry_msgs::msg::Wrench>::SharedPtr  	force_sub_;

@@ -39,6 +39,9 @@ AdmittanceControl::AdmittanceControl(): Node("admittance_control_node")
     xd_sub_ = this->create_subscription<geometry_msgs::msg::Pose>(manipulator_name_+"/adm_xd", 1,
                  std::bind(&AdmittanceControl::admittanceXdCallback, this, std::placeholders::_1), sub_options);
 
+    vd_sub_ = this->create_subscription<geometry_msgs::msg::Twist>(manipulator_name_+"/adm_vd", 1,
+                 std::bind(&AdmittanceControl::admittanceVdCallback, this, std::placeholders::_1), sub_options);
+
     // Subscribers to change admittance
     auto cb_group_adm = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     sub_options.callback_group = cb_group_adm;
@@ -69,6 +72,9 @@ AdmittanceControl::AdmittanceControl(): Node("admittance_control_node")
     // Publish service to enable admittance control
     adm_service_ = this->create_service<std_srvs::srv::SetBool>(manipulator_name_+"/enable_admittance",
                    std::bind(&AdmittanceControl::enableAdmittance, this, std::placeholders::_1, std::placeholders::_2));
+
+    adm_vel_mode_service_ = this->create_service<std_srvs::srv::SetBool>(manipulator_name_+"/admittance_vel_mode",
+                   std::bind(&AdmittanceControl::setAdmittanceVelMode, this, std::placeholders::_1, std::placeholders::_2));
 
     // Publish service to enable pushing control
     push_service_ = this->create_service<std_srvs::srv::SetBool>(manipulator_name_+"/enable_push_regulation",
@@ -343,6 +349,16 @@ void AdmittanceControl::admittanceXdCallback(const std::shared_ptr<geometry_msgs
     xd_(6) = msg->orientation.w; 
 }
 
+void AdmittanceControl::admittanceVdCallback(const std::shared_ptr<geometry_msgs::msg::Twist> msg)
+{
+    dx_des_(0) = msg->linear.x;
+    dx_des_(1) = msg->linear.y;
+    dx_des_(2) = msg->linear.z;
+    dx_des_(3) = msg->angular.x;
+    dx_des_(4) = msg->angular.y;
+    dx_des_(5) = msg->angular.z;
+}
+
 // ----------------------------- SERVICE CALLBACKS ----------------------------- //
 // Service callback to enable or disable admittance control
 void AdmittanceControl::enableAdmittance(const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
@@ -368,6 +384,16 @@ void AdmittanceControl::enableAdmittance(const std::shared_ptr<std_srvs::srv::Se
 
     response->success = true;
     response->message = request->data ? "Admittance control enabled" : "Admittance control disabled";
+}
+
+//Service to set vel mode for admittance control, if request is false the default position mode will be used
+void AdmittanceControl::setAdmittanceVelMode(const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+                                             std::shared_ptr<std_srvs::srv::SetBool::Response>      response){
+    vel_mode_ = request->data;
+
+    RCLCPP_INFO(this->get_logger(), "Vel mode %s", request->data ? "ENABLED" : "DISABLED");
+    response->success = true;
+    response->message = request->data ? "Vel mode enabled" : "Vel mode disabled";
 }
 
 // Service callback to enable or disable push regulation
@@ -405,6 +431,20 @@ void AdmittanceControl::computeAdmittanceControl()
 
     // Adapt parameters if the force error is not zero
     updateParamOnWrenchError(filtered_wrench, push_force_goal_);
+
+    if (vel_mode_){
+        Eigen::VectorXd dx = dx_des_ / loop_rate_;
+        xd_(0) = ee_pose_(0) + dx(0);
+        xd_(1) = ee_pose_(1) + dx(1);
+        xd_(2) = ee_pose_(2) + dx(2);
+        Eigen::Quaternion q_dx = quaternion_from_euler(dx(3), dx(4), dx(5));
+        Eigen::Quaternion q_current {ee_pose_(3), ee_pose_(4), ee_pose_(5), ee_pose_(6)};
+        q_current *= q_dx;
+        xd_(3) = q_current.x();
+        xd_(4) = q_current.y();
+        xd_(5) = q_current.z();
+        xd_(6) = q_current.w();
+    }
 
     // Compute the desired end-effector speed according to the admittance controller
     Eigen::VectorXd dx_cmd = adm_controller_->computeEESpeed(filtered_wrench,xd_,ee_pose_,dx_,dx_des_,ddx_des_);
