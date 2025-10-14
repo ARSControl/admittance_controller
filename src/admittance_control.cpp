@@ -36,8 +36,11 @@ AdmittanceControl::AdmittanceControl(const std::string& node_name) : rclcpp::Nod
 
     // Initialize wrench to zero
     wrench_.setZero();
-
     start_time_ = this->get_clock()->now();
+}
+
+AdmittanceControl::~AdmittanceControl(){
+    writeToCSV();
 }
 
 // Node params update
@@ -133,12 +136,12 @@ void AdmittanceControl::check_params()
     
     // ----------------- TOPICS ---------------------
     // Joint States topic
-    this->declare_parameter("joints_state_topic", rclcpp::PARAMETER_STRING);
-    if (!this->has_parameter("joints_state_topic")) {
+    this->declare_parameter("joint_state_topic", rclcpp::PARAMETER_STRING);
+    if (!this->has_parameter("joint_state_topic")) {
         RCLCPP_WARN(this->get_logger(), "Joint States topic param not set, using default: /joint_states");
-        this->declare_parameter<std::string>("joints_state_topic", "/joint_states");
+        this->declare_parameter<std::string>("joint_state_topic", "/joint_states");
     }
-    joints_state_topic_ = this->get_parameter("joints_state_topic").as_string();
+    joints_state_topic_ = this->get_parameter("joint_state_topic").as_string();
 
     // Init force feedback topic
     this->declare_parameter("force_feed_topic", rclcpp::PARAMETER_STRING);
