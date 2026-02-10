@@ -9,6 +9,7 @@
 #include <geometry_msgs/msg/twist.hpp>
 #include <geometry_msgs/msg/wrench.hpp>
 #include <geometry_msgs/msg/vector3.hpp>
+#include <admittance_controller/srv/set_float64.hpp>
 #include <eigen3/Eigen/Dense>
 #include <admittance_controller/admittance_controller.h>
 
@@ -31,6 +32,10 @@ private:
 
     void enablePush(const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
                     std::shared_ptr<std_srvs::srv::SetBool::Response> response);
+    void setPushForceReference(const std::shared_ptr<admittance_controller::srv::SetFloat64::Request> request,
+                               std::shared_ptr<admittance_controller::srv::SetFloat64::Response> response);
+    void setMaxCmdAcceleration(const std::shared_ptr<admittance_controller::srv::SetFloat64::Request> request,
+                               std::shared_ptr<admittance_controller::srv::SetFloat64::Response> response);
 					
 	void admittanceXdCallback(const std::shared_ptr<geometry_msgs::msg::Pose> msg);
     void admittanceVdCallback(const std::shared_ptr<geometry_msgs::msg::Twist> msg); //Callback for velocity setpoint
@@ -65,6 +70,7 @@ private:
     double loop_rate_;
 	int n_joints_;
 	double push_force_goal_;
+    double max_cmd_acc_;
 
     bool vel_mode_ = false; // true -> velocity mode, false -> position mode (default behaviour)
 
@@ -98,6 +104,8 @@ private:
     rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr adm_vel_mode_service_;
 
     rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr push_service_;
+    rclcpp::Service<admittance_controller::srv::SetFloat64>::SharedPtr push_force_ref_service_;
+    rclcpp::Service<admittance_controller::srv::SetFloat64>::SharedPtr max_cmd_acc_service_;
     rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr ft_client_;
 	// Publishers
 	rclcpp::Publisher<geometry_msgs::msg::Wrench>::SharedPtr wf_pub_;

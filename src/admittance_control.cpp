@@ -1,4 +1,5 @@
 #include "admittance_control/admittance_control.h"
+#include <algorithm>
 
 // Constructor for the AdmittanceControl class
 AdmittanceControl::AdmittanceControl(): Node("admittance_control_node")
@@ -80,6 +81,16 @@ AdmittanceControl::AdmittanceControl(): Node("admittance_control_node")
     push_service_ = this->create_service<std_srvs::srv::SetBool>(manipulator_name_+"/enable_push_regulation",
                    std::bind(&AdmittanceControl::enablePush, this, std::placeholders::_1, std::placeholders::_2));
 
+    push_force_ref_service_ = this->create_service<admittance_controller::srv::SetFloat64>(
+        manipulator_name_ + "/set_push_force_reference",
+        std::bind(&AdmittanceControl::setPushForceReference, this, std::placeholders::_1, std::placeholders::_2)
+    );
+
+    max_cmd_acc_service_ = this->create_service<admittance_controller::srv::SetFloat64>(
+        manipulator_name_ + "/set_max_cmd_acceleration",
+        std::bind(&AdmittanceControl::setMaxCmdAcceleration, this, std::placeholders::_1, std::placeholders::_2)
+    );
+
     // Create service client to zero the force-torque sensor
     this->declare_parameter("zero_ft_topic", "/ur_rtde/zeroFTSensor");
     std::string zero_ft_sensor_topic = this->get_parameter("zero_ft_topic").as_string();
@@ -130,12 +141,14 @@ void AdmittanceControl::check_params()
     this->declare_parameter("kp_push", 0.001);
     this->declare_parameter("push_force_goal", 8.0);
     this->declare_parameter("safe_push_dist", 0.2);
+    this->declare_parameter("max_cmd_acc", 10.0);
 
     double kp_pos = this->get_parameter("kp_pos").as_double();
     double kp_rot = this->get_parameter("kp_rot").as_double();
     double kp_push = this->get_parameter("kp_push").as_double();
     push_force_goal_ = this->get_parameter("push_force_goal").as_double();
     double safe_push_dist = this->get_parameter("safe_push_dist").as_double();
+    max_cmd_acc_ = this->get_parameter("max_cmd_acc").as_double();
 
     // Declare and get dead zone thresholds
     this->declare_parameter("dz_force", 5.0);
@@ -158,6 +171,7 @@ void AdmittanceControl::check_params()
         kp_push, push_force_goal_,
         safe_push_dist, acc_filter_freq
     );
+    adm_controller_->setMaxAcceleration(max_cmd_acc_);
 
     // Init force filter
     force_filter_ = new filters::RCFilter(6, acc_filter_freq, 1.0 / loop_rate_);
@@ -420,6 +434,28 @@ void AdmittanceControl::enablePush(const std::shared_ptr<std_srvs::srv::SetBool:
 
     response->success = true;
     response->message = request->data ? "Push regulation enabled" : "Push regulation disabled";
+}
+
+void AdmittanceControl::setPushForceReference(
+    const std::shared_ptr<admittance_controller::srv::SetFloat64::Request> request,
+    std::shared_ptr<admittance_controller::srv::SetFloat64::Response> response)
+{
+    push_force_goal_ = request->value;
+    adm_controller_->setPushForceGoal(push_force_goal_);
+    response->success = true;
+    response->message = "Push force reference updated";
+    RCLCPP_INFO(this->get_logger(), "Push force reference set to %.4f", push_force_goal_);
+}
+
+void AdmittanceControl::setMaxCmdAcceleration(
+    const std::shared_ptr<admittance_controller::srv::SetFloat64::Request> request,
+    std::shared_ptr<admittance_controller::srv::SetFloat64::Response> response)
+{
+    max_cmd_acc_ = std::max(0.0, request->value);
+    adm_controller_->setMaxAcceleration(max_cmd_acc_);
+    response->success = true;
+    response->message = "Max command acceleration updated";
+    RCLCPP_INFO(this->get_logger(), "Max command acceleration set to %.4f", max_cmd_acc_);
 }
 
 // ----------------------------- MAIN LOOP ---------------------------- //

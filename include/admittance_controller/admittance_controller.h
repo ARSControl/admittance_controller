@@ -40,6 +40,8 @@ public:
 	void disableAdmittance();
 	void enablePush();
 	void disablePush();
+    void setPushForceGoal(const double &push_force_goal);
+    void setMaxAcceleration(const double &max_acc);
 
 	void setDeadZone(const double &dead_zone_force, const double &dead_zone_torque);
 	void cutSignal(double &x, const double &dead_zone);
@@ -73,6 +75,7 @@ private:
 
 	double dead_zone_force_;
 	double dead_zone_torque_;
+    double max_acc_;
 
 	Eigen::VectorXd cumulative_step_;
 };

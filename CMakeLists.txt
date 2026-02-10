@@ -14,13 +14,20 @@ endif()
 
 # Dependencies
 find_package(ament_cmake REQUIRED)
+find_package(PkgConfig REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
 find_package(filters_c REQUIRED)  # local package in workspace
+pkg_check_modules(SDL2 REQUIRED sdl2)
+
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "srv/SetFloat64.srv"
+)
 
 # Include directories
 include_directories(
@@ -28,12 +35,12 @@ include_directories(
 )
 
 # Library target
-add_library(admittance_controller SHARED
+add_library(admittance_controller_lib SHARED
   src/admittance_controller.cpp
 )
 
 # --------- ADMITTANCE CONTROLLER ---------
-ament_target_dependencies(admittance_controller
+ament_target_dependencies(admittance_controller_lib
   rclcpp
   std_msgs
   sensor_msgs
@@ -58,12 +65,14 @@ ament_target_dependencies(admittance_control_node
   Eigen3
   filters_c
 )
+rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
+target_link_libraries(admittance_control_node "${cpp_typesupport_target}")
 
-target_link_libraries(admittance_control_node admittance_controller)
+target_link_libraries(admittance_control_node admittance_controller_lib)
 
 # Install targets
 install(TARGETS
-  admittance_controller
+  admittance_controller_lib
   admittance_control_node
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
@@ -83,6 +92,18 @@ install(TARGETS
 add_executable(admittance_menu_node src/admittance_menu_node.cpp)
 ament_target_dependencies(admittance_menu_node rclcpp std_srvs std_msgs geometry_msgs)
 install(TARGETS admittance_menu_node DESTINATION lib/${PROJECT_NAME})
+
+# ------------ JOYSTICK MODE COMMANDER ------------
+add_executable(joy_mode_command_node src/joy_mode_command_node.cpp)
+ament_target_dependencies(joy_mode_command_node rclcpp sensor_msgs geometry_msgs)
+install(TARGETS joy_mode_command_node DESTINATION lib/${PROJECT_NAME})
+
+# ------------ ADMITTANCE GUI ------------
+add_executable(admittance_gui_node src/admittance_gui_node.cpp)
+ament_target_dependencies(admittance_gui_node rclcpp sensor_msgs geometry_msgs std_srvs)
+target_include_directories(admittance_gui_node PRIVATE ${SDL2_INCLUDE_DIRS})
+target_link_libraries(admittance_gui_node ${SDL2_LIBRARIES} "${cpp_typesupport_target}")
+install(TARGETS admittance_gui_node DESTINATION lib/${PROJECT_NAME})
 
 # -------------- INSTALL DIRECTORIES ------------
 # Install headers
@@ -109,6 +130,7 @@ ament_export_dependencies(
   std_srvs
   Eigen3
   filters_c
+  rosidl_default_runtime
 )
 ament_export_include_directories(include)
 

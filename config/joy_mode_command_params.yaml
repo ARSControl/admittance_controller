@@ -1,0 +1,97 @@
+# Parameters for joy_mode_command_node
+# This node:
+# - Listens to /joy event callbacks for mode switches (A/X/Y/B by default)
+# - Publishes commands at fixed 20 Hz from the latest joystick state
+# - Supports arm cartesian mode and arm joint mode (while L1 is pressed)
+
+joy_mode_command_node:
+  ros__parameters:
+    joy_topic: "/joy"
+
+    # Output topics (all configurable)
+    topics.arm_twist: "/manipulator/cmd_vel"
+    topics.arm_joint: "/manipulator/js_cmd_vel"
+    topics.mobile_twist: "/cmd_vel"
+    topics.whole_body_twist: "/mobile_manipulator/cmd_vel"
+
+    # JointState names for arm joint mode
+    joint_names:
+      - shoulder_pan_joint
+      - shoulder_lift_joint
+      - elbow_joint
+      - wrist_1_joint
+      - wrist_2_joint
+      - wrist_3_joint
+
+    # Buttons for main mode selection (keep on D-mode)
+    # Default mapping is: A=0, B=1, X=2, Y=3
+    buttons.mode_arm: 0
+    buttons.mode_mobile: 2
+    buttons.mode_whole_body: 3
+    buttons.mode_stop: 1
+
+    # Arm sub-mode buttons (event-based, latched)
+    # Press R1 -> switch arm to JOINT mode
+    # Press L1 -> switch arm to CARTESIAN cmd_vel mode
+    # (legacy buttons.arm_joint_mode is also supported by the node)
+    buttons.arm_joint_mode_l1: 9
+    buttons.arm_joint_mode_r1: 10
+
+    # Axis deadzone
+    axis_deadzone: 0.05
+
+    # Arm cartesian axis mapping
+    # Left stick controls X/Y, right horizontal controls Z
+    # While R2 is pressed in arm cartesian mode, these same axes command angular twist.
+    axes.arm_linear_x: 1
+    axes.arm_linear_y: 0
+    axes.arm_linear_z: 3
+
+    # Arm joint mapping (left/right horizontal sticks by default)
+    axes.arm_joint_left: 0
+    axes.arm_joint_right: 3
+
+    # Analog triggers used as modifiers in arm joint mode:
+    # if axis value is < trigger_pressed_threshold, trigger is considered pressed
+    # L2 adds joints 3-4, R2 adds joints 5-6
+    axes.arm_pair_34_trigger: 4   # L2
+    axes.arm_pair_56_trigger: 5   # R2
+    trigger_pressed_threshold: -0.90
+
+    # Mobile-only (X mode) axis mapping
+    axes.mobile_linear_x: 1
+    axes.mobile_linear_y: 0
+    axes.mobile_angular_z: 2
+
+    # Whole-body (Y mode) axis mapping
+    # Like arm cartesian mode:
+    # - default: linear XYZ from these 3 axes
+    # - while R2 trigger is pressed: angular XYZ from the same 3 axes
+    axes.whole_body_linear_x: 1
+    axes.whole_body_linear_y: 0
+    axes.whole_body_linear_z: 3
+    axes.whole_body_rotation_trigger: 5
+
+    # Arm cartesian scales
+    scales.arm_linear_x: 0.20
+    scales.arm_linear_y: 0.20
+    scales.arm_linear_z: 0.20
+    scales.arm_angular_x: 0.20
+    scales.arm_angular_y: 0.20
+    scales.arm_angular_z: 0.20
+
+    # Arm joint velocity scale
+    scales.arm_joint: 0.20
+
+    # Mobile-only scales
+    scales.mobile_linear_x: 0.20
+    scales.mobile_linear_y: 0.20
+    scales.mobile_angular_z: 0.20
+
+    # Whole-body scales
+    scales.whole_body_linear_x: 0.20
+    scales.whole_body_linear_y: 0.20
+    scales.whole_body_linear_z: 0.20
+    scales.whole_body_angular_x: 0.20
+    scales.whole_body_angular_y: 0.20
+    scales.whole_body_angular_z: 0.20

@@ -1,0 +1,20 @@
+admittance_gui_node:
+  ros__parameters:
+    manipulator_name: "manipulator"
+
+    services.admittance_enable: "manipulator/enable_admittance"
+    services.push_enable: "manipulator/enable_push_regulation"
+    services.wbqp_enable: "/wbqp_controller/enable_qp"
+    services.jacobian_realtime_enable: "manipulator/jacobian_control_setter"
+    services.joints_realtime_enable: "manipulator/joints_real_time_setter"
+
+    topics.joint_states: "/joint_states"
+    topics.arm_cmd_twist: "/manipulator/cmd_vel"
+    topics.arm_cmd_joint: "/manipulator/js_cmd_vel"
+    topics.mobile_cmd_twist: "/cmd_vel"
+    topics.whole_body_cmd_twist: "/mobile_manipulator/cmd_vel"
+
+    ui.admittance_value: 20.0
+    ui.force_reference: 6.0
+    ui.max_cmd_acc: 0.5
+    ui.step_value: 0.5

@@ -1,4 +1,5 @@
 #include "admittance_controller/admittance_controller.h"
+#include <algorithm>
 
 // Constructor for the AdmittanceController class
 AdmittanceController::AdmittanceController( const std::vector<double>& m_des,
@@ -12,7 +13,8 @@ AdmittanceController::AdmittanceController( const std::vector<double>& m_des,
                                             const double& acc_filter_freq)
                                             : n_joints_(n_joints), ts_(ts), 
                                               kp_push_(kp_push), push_force_goal_(push_force_goal),
-                                              safe_push_dist_(safe_push_dist)
+                                              safe_push_dist_(safe_push_dist),
+                                              max_acc_(1e9)
 {
     // Initialize number of joints and time step
     n_joints_ = n_joints;
@@ -141,6 +143,13 @@ Eigen::VectorXd AdmittanceController::computeEESpeed(      Eigen::VectorXd &wren
     // Apply the low-pass filter to the acceleration
     ddx = ddx_filter_->filter(ddx);
 
+    // Clip acceleration command component-wise.
+    if (max_acc_ > 0.0) {
+        for (int k = 0; k < ddx.size(); ++k) {
+            ddx(k) = std::max(-max_acc_, std::min(max_acc_, ddx(k)));
+        }
+    }
+
     // Increment the speed setpoint
     dx_res = dx + ddx * ts_;
 
@@ -246,6 +255,16 @@ void AdmittanceController::enablePush()
 void AdmittanceController::disablePush()
 {
     pushing_reg_active_ = false;
+}
+
+void AdmittanceController::setPushForceGoal(const double &push_force_goal)
+{
+    push_force_goal_ = push_force_goal;
+}
+
+void AdmittanceController::setMaxAcceleration(const double &max_acc)
+{
+    max_acc_ = std::max(0.0, max_acc);
 }
 
 // ------------------------------ FORCE HANDLING ---------------------------
