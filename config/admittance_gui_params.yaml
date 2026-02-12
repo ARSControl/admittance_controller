@@ -1,27 +1,38 @@
 admittance_gui_node:
   ros__parameters:
-    manipulator_name: "manipulator"
 
-    services.admittance_enable: "manipulator/enable_admittance"
-    services.push_enable: "manipulator/enable_push_regulation"
+    # Manipulator
+    manipulator_name: "mobile_manipulator"
+    topics.joint_states: "/joint_states"
+    topics.arm_cmd_twist: "/manipulator/cmd_vel"
+    topics.arm_cmd_joint: "/manipulator/js_cmd_vel"
+    topics.whole_body_cmd_twist: "/mobile_manipulator/cmd_vel"
+
+    # Mobile robot
+    topics.mobile_cmd_twist: "/cmd_vel"
+    topics.emergency_state: "/emergency_stop_state"
+    topics.battery_status: "/battery_status"
+
+    # Joy
+    topics.joy_active_status: "/joy_mode_command/joy_active"
+
+    # Network setup
+    network.arm_ip: "192.168.2.30"
+    network.mobile_ip: "192.168.2.50"
+    network.ping_period_ms: 1000
+
+    # Modes
+    services.admittance_enable: "mobile_manipulator/enable_admittance"
+    services.push_enable: "mobile_manipulator/enable_push_regulation"
     services.wbqp_enable: "/wbqp_controller/enable_qp"
     services.jacobian_realtime_enable: "manipulator/jacobian_control_setter"
     services.joints_realtime_enable: "manipulator/joints_real_time_setter"
     services.mobile_emergency_stop: "/mobile_platform/emergency_stop"
+    services.joy_enable: "/joy_mode_command_node/enable_joy"
     services.gripper_control: "/ur_rtde_controller/robotiq_gripper_control"
+    zero_ft_topic: "/ur_rtde/zeroFTSensor"
 
-    topics.joint_states: "/joint_states"
-    topics.arm_cmd_twist: "/manipulator/cmd_vel"
-    topics.arm_cmd_joint: "/manipulator/js_cmd_vel"
-    topics.mobile_cmd_twist: "/cmd_vel"
-    topics.whole_body_cmd_twist: "/mobile_manipulator/cmd_vel"
-    topics.emergency_state: "/emergency_stop_state"
-    topics.battery_status: "/battery_status"
-
-    network.arm_ip: "192.168.2.10"
-    network.mobile_ip: "192.168.2.50"
-    network.ping_period_ms: 1500
-
+    # Default values
     ui.admittance_value: 20.0
     ui.force_reference: 6.0
     ui.max_cmd_acc: 0.5

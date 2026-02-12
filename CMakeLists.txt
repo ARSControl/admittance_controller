@@ -97,12 +97,12 @@ install(TARGETS admittance_menu_node DESTINATION lib/${PROJECT_NAME})
 
 # ------------ JOYSTICK MODE COMMANDER ------------
 add_executable(joy_mode_command_node src/joy_mode_command_node.cpp)
-ament_target_dependencies(joy_mode_command_node rclcpp sensor_msgs geometry_msgs std_srvs)
+ament_target_dependencies(joy_mode_command_node rclcpp sensor_msgs geometry_msgs std_srvs std_msgs)
 install(TARGETS joy_mode_command_node DESTINATION lib/${PROJECT_NAME})
 
 # ------------ ADMITTANCE GUI ------------
 add_executable(admittance_gui_node src/admittance_gui_node.cpp)
-ament_target_dependencies(admittance_gui_node rclcpp sensor_msgs geometry_msgs std_srvs ur_rtde_controller)
+ament_target_dependencies(admittance_gui_node rclcpp sensor_msgs geometry_msgs std_srvs ur_rtde_controller std_msgs)
 ament_target_dependencies(admittance_gui_node neo_msgs2)
 target_include_directories(admittance_gui_node PRIVATE ${SDL2_INCLUDE_DIRS})
 target_link_libraries(admittance_gui_node ${SDL2_LIBRARIES} "${cpp_typesupport_target}")

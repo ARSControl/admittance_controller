@@ -120,24 +120,6 @@ Eigen::VectorXd AdmittanceController::computeEESpeed(      Eigen::VectorXd &wren
     if (pushing_reg_active_)    {pose_err = computeError(ee_pose, pushRegulation(wrench,xd,ee_pose));}
     else                        {pose_err = computeError(ee_pose, xd);}
 
-    // // Compute the acceleration of the system
-    // std::cout << "Desired acceleration: " << std::endl;
-    // std::cout << ddx_des << std::endl;
-    // std::cout << "Current speed: " << std::endl;
-    // std::cout << dx << std::endl;
-    // std::cout << "Current wrench: " << std::endl;
-    // std::cout << wrench << std::endl;
-    // std::cout << "Desired M: " << std::endl;
-    // std::cout << M_des_ << std::endl;
-    // std::cout << "Desired B: " << std::endl;
-    // std::cout << B_des_ << std::endl;
-    // std::cout << "Desired K: " << std::endl;
-    // std::cout << K_des_ << std::endl;
-    // std::cout << "Desired speed: " << std::endl;
-    // std::cout << dx_des << std::endl;
-    // std::cout << "Current pose error: " << std::endl;
-    // std::cout << pose_err << std::endl;
-
     Eigen::VectorXd ddx = ddx_des + M_des_.inverse() * (wrench + B_des_ * (dx_des - dx) + K_des_ * pose_err);
 
     // Apply the low-pass filter to the acceleration

@@ -9,6 +9,7 @@
 #include <geometry_msgs/msg/twist.hpp>
 #include <sensor_msgs/msg/joy.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <std_msgs/msg/bool.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 
 class JoyModeCommandNode : public rclcpp::Node
@@ -29,8 +30,13 @@ public:
         arm_joint_pub_ = this->create_publisher<sensor_msgs::msg::JointState>(arm_joint_topic_, 10);
         mobile_twist_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(mobile_twist_topic_, 10);
         whole_body_twist_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(whole_body_twist_topic_, 10);
+        joy_active_pub_ = this->create_publisher<std_msgs::msg::Bool>(joy_active_topic_, 10);
         mobile_emergency_stop_client_ =
             this->create_client<std_srvs::srv::SetBool>(mobile_emergency_stop_service_);
+        joy_enable_srv_ = this->create_service<std_srvs::srv::SetBool>(
+            joy_enable_service_,
+            std::bind(&JoyModeCommandNode::onJoyEnableService, this, std::placeholders::_1, std::placeholders::_2)
+        );
 
         // Fixed publish rate: 20 Hz (50 ms period)
         publish_timer_ = this->create_wall_timer(
@@ -39,6 +45,7 @@ public:
         );
 
         RCLCPP_INFO(this->get_logger(), "joy_mode_command_node started. Listening on '%s'.", joy_topic_.c_str());
+        publishJoyActive(joy_active_);
     }
 
 private:
@@ -62,7 +69,9 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr arm_joint_pub_;
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr mobile_twist_pub_;
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr whole_body_twist_pub_;
+    rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr joy_active_pub_;
     rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr mobile_emergency_stop_client_;
+    rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr joy_enable_srv_;
     rclcpp::TimerBase::SharedPtr publish_timer_;
 
     // Topics
@@ -71,7 +80,9 @@ private:
     std::string arm_joint_topic_;
     std::string mobile_twist_topic_;
     std::string whole_body_twist_topic_;
+    std::string joy_active_topic_;
     std::string mobile_emergency_stop_service_;
+    std::string joy_enable_service_;
 
     // Joint command metadata
     std::vector<std::string> joint_names_;
@@ -81,6 +92,7 @@ private:
     int button_mode_mobile_;
     int button_mode_whole_body_;
     int button_mode_stop_;
+    int button_toggle_joy_start_;
 
     // Arm sub-mode buttons
     int button_arm_joint_mode_l1_;
@@ -137,6 +149,7 @@ private:
     Mode mode_{Mode::STOP};
     bool stop_zero_pending_{true};
     ArmControlMode arm_control_mode_{ArmControlMode::CARTESIAN_TWIST};
+    bool joy_active_{false};
 
     void declareAndLoadParameters()
     {
@@ -146,8 +159,11 @@ private:
         arm_joint_topic_ = this->declare_parameter<std::string>("topics.arm_joint", "/manipulator/js_cmd_vel");
         mobile_twist_topic_ = this->declare_parameter<std::string>("topics.mobile_twist", "/neo/cmd_vel");
         whole_body_twist_topic_ = this->declare_parameter<std::string>("topics.whole_body_twist", "/mobile_manipulator/cmd_vel");
+        joy_active_topic_ = this->declare_parameter<std::string>("topics.joy_active_status", "/joy_mode_command/joy_active");
         mobile_emergency_stop_service_ = this->declare_parameter<std::string>(
             "services.mobile_emergency_stop", "/mobile_platform/emergency_stop");
+        joy_enable_service_ = this->declare_parameter<std::string>(
+            "services.joy_enable", "/joy_mode_command_node/enable_joy");
 
         joint_names_ = this->declare_parameter<std::vector<std::string>>(
             "joint_names",
@@ -165,6 +181,7 @@ private:
         button_mode_mobile_ = this->declare_parameter<int>("buttons.mode_mobile", 2);          // X
         button_mode_whole_body_ = this->declare_parameter<int>("buttons.mode_whole_body", 3);  // Y
         button_mode_stop_ = this->declare_parameter<int>("buttons.mode_stop", 1);              // B
+        button_toggle_joy_start_ = this->declare_parameter<int>("buttons.toggle_joy_active_start", 6); // START
 
         const int legacy_arm_joint_mode = this->declare_parameter<int>("buttons.arm_joint_mode", 9);
         button_arm_joint_mode_l1_ = this->declare_parameter<int>("buttons.arm_joint_mode_l1", legacy_arm_joint_mode);
@@ -234,6 +251,15 @@ private:
             setModeLocked(Mode::WHOLE_BODY);
         }
 
+        if (isRisingEdge(*msg, button_toggle_joy_start_)) {
+            joy_active_ = !joy_active_;
+            publishJoyActive(joy_active_);
+            RCLCPP_INFO(
+                this->get_logger(),
+                "Joy active toggled by START: %s",
+                joy_active_ ? "ENABLED" : "DISABLED");
+        }
+
         // Arm sub-mode selection is event-based:
         // R1 -> joint control mode, L1 -> cartesian cmd_vel mode.
         if (isRisingEdge(*msg, button_arm_joint_mode_r1_)) {
@@ -256,6 +282,7 @@ private:
         bool has_joy_msg = false;
         bool stop_zero_pending = false;
         ArmControlMode arm_control_mode = ArmControlMode::CARTESIAN_TWIST;
+        bool joy_active = false;
 
         {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -266,10 +293,14 @@ private:
                 has_joy_msg = true;
             }
             stop_zero_pending = stop_zero_pending_;
+            joy_active = joy_active_;
             if (mode_ == Mode::STOP && stop_zero_pending_) {
                 stop_zero_pending_ = false;
             }
         }
+
+        // Keep status observable for late subscribers (e.g. GUI restart).
+        publishJoyActive(joy_active);
 
         if (mode == Mode::STOP) {
             if (stop_zero_pending) {
@@ -280,6 +311,10 @@ private:
         }
 
         if (!has_joy_msg) {
+            return;
+        }
+
+        if (!joy_active) {
             return;
         }
 
@@ -486,6 +521,30 @@ private:
         auto req = std::make_shared<std_srvs::srv::SetBool::Request>();
         req->data = emergency_enabled;
         mobile_emergency_stop_client_->async_send_request(req);
+    }
+
+    void onJoyEnableService(
+        const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+        std::shared_ptr<std_srvs::srv::SetBool::Response> response)
+    {
+        bool current_state = false;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            joy_active_ = request->data;
+            current_state = joy_active_;
+        }
+
+        publishJoyActive(current_state);
+        response->success = true;
+        response->message = std::string("joy active set to ") + (current_state ? "true" : "false");
+        RCLCPP_INFO(this->get_logger(), "Joy active set by service: %s", current_state ? "ENABLED" : "DISABLED");
+    }
+
+    void publishJoyActive(bool active)
+    {
+        std_msgs::msg::Bool msg;
+        msg.data = active;
+        joy_active_pub_->publish(msg);
     }
 
     static std::string modeToString(Mode mode)

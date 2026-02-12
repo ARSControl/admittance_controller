@@ -30,13 +30,13 @@ If something doesn't work, try to launch directly the main neobotics code with:
 
 # Start ur5e planner and controller
 
-Launch the following cmd to enable the planner and the robotiq gripper
+Launch the following cmd to enable the planner:
 
-    ros2 launch manipulators planner.launch.py ur_type:=ur5e publish_joint_states:=False gripper:=robotiq_85
+    ros2 launch manipulators planner.launch.py ur_type:=ur5e publish_joint_states:=False
 
-Or you can directly use the following if you want to include gripper collision box:
+Or you can directly use the following if you want to include gripper collision box and mobile robot platform collision boxes:
 
-    ros2 launch manipulators ur5e_eecam.launch.py publish_joint_states:=False xacro_args:='camera:=false gripper:=true gfloor:=false gripper_collision_box:=true tcp_gripper:=0.08'
+    ros2 launch manipulators custom_robot.launch.py ur_type:=ur5e robot:=ur5e_mobile publish_joint_states:=False xacro_args:='camera:=false gripper:=false gfloor:=true gripper_collision_box:=true tcp_offset:=0.148'
 
 Launch the interaction menu (if you need further planning tools):
 
@@ -46,6 +46,12 @@ Launch the driver controller to connect to the robot:
 
     ros2 launch manipulators real_control_driver.launch.py ur_type:=ur5e
 
+# Launch TCP-world pose publisher
+
+This is the EE pose referred to the world frame, considered the integrated speed motion of the mobile base:
+
+    ros2 run wbqp_controller tcp_pose_converter
+
 # Launch whole body controller
 
     ros2 launch wbqp_controller wbqp_controller.launch.py
@@ -53,6 +59,10 @@ Launch the driver controller to connect to the robot:
 # Launch admittance controller
 
     ros2 launch admittance_controller mobile_ur5e.launch.py
+
+# Display the interaction forces
+
+    ros2 run admittance_controller wrench_plot_publisher --ros-args -p filtered_wrench_topic:=/mobile_manipulator/filtered_wrench
 
 # Launch app
 
@@ -63,4 +73,3 @@ Launch the driver controller to connect to the robot:
     ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r cmd_vel:=/mobile_manipulator/cmd_vel
     ros2 run sirio_utilities sirio_arm_gui --ros-args -r /manipulator/tcp_force:=/mobile_manipulator/filtered_wrench
     ros2 run admittance_controller admittance_menu_node --ros-args -p manipulator_name:=mobile_manipulator
-    ros2 run wbqp_controller tcp_pose_converter

@@ -1,4 +1,5 @@
 #include <SDL2/SDL.h>
+#include <ament_index_cpp/get_package_share_directory.hpp>
 
 #include <algorithm>
 #include <array>
@@ -6,8 +7,10 @@
 #include <cmath>
 #include <cctype>
 #include <cstdlib>
+#include <cstdio>
 #include <deque>
 #include <functional>
+#include <limits>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -21,7 +24,9 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/battery_state.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <std_msgs/msg/bool.hpp>
 #include <std_srvs/srv/set_bool.hpp>
+#include <std_srvs/srv/trigger.hpp>
 #include <ur_rtde_controller/srv/roboti_q_gripper_control.hpp>
 
 #include <admittance_controller/srv/set_float64.hpp>
@@ -30,6 +35,7 @@ namespace {
 
 struct UiButton {
   std::string label;
+  SDL_Rect base_rect{};
   SDL_Rect rect{};
   std::function<void()> on_click;
   SDL_Color color{70, 70, 70, 255};
@@ -37,6 +43,7 @@ struct UiButton {
 
 struct UiTextField {
   std::string label;
+  SDL_Rect base_rect{};
   SDL_Rect rect{};
   std::string text;
   bool active{false};
@@ -224,7 +231,8 @@ std::string fmt(double v, int p = 3) {
 
 class AdmittanceGuiNode : public rclcpp::Node {
 public:
-  AdmittanceGuiNode() : Node("admittance_gui_node") {
+  explicit AdmittanceGuiNode(const rclcpp::NodeOptions &options = rclcpp::NodeOptions())
+  : Node("admittance_gui_node", options) {
     manipulator_name_ = this->declare_parameter<std::string>("manipulator_name", "manipulator");
     admittance_service_name_ = this->declare_parameter<std::string>(
       "services.admittance_enable", manipulator_name_ + "/enable_admittance");
@@ -237,6 +245,10 @@ public:
       "services.joints_realtime_enable", manipulator_name_ + "/joints_real_time_setter");
     mobile_emergency_stop_service_name_ = this->declare_parameter<std::string>(
       "services.mobile_emergency_stop", "/mobile_platform/emergency_stop");
+    joy_enable_service_name_ = this->declare_parameter<std::string>(
+      "services.joy_enable", "/joy_mode_command_node/enable_joy");
+    zero_ft_service_name_ = this->declare_parameter<std::string>(
+      "zero_ft_topic", "/ur_rtde/zeroFTSensor");
 
     joint_states_topic_ = this->declare_parameter<std::string>("topics.joint_states", "/joint_states");
     arm_cmd_topic_ = this->declare_parameter<std::string>("topics.arm_cmd_twist", "/manipulator/cmd_vel");
@@ -245,18 +257,19 @@ public:
     whole_body_cmd_topic_ = this->declare_parameter<std::string>("topics.whole_body_cmd_twist", "/mobile_manipulator/cmd_vel");
     emergency_topic_ = this->declare_parameter<std::string>("topics.emergency_state", "/emergency_stop_state");
     battery_topic_ = this->declare_parameter<std::string>("topics.battery_status", "/battery_status");
+    joy_active_topic_ = this->declare_parameter<std::string>("topics.joy_active_status", "/joy_mode_command/joy_active");
 
     arm_ip_ = this->declare_parameter<std::string>("network.arm_ip", "192.168.2.10");
     mobile_ip_ = this->declare_parameter<std::string>("network.mobile_ip", "192.168.2.50");
     ping_period_ms_ = this->declare_parameter<int>("network.ping_period_ms", 1000);
 
-    this->declare_parameter<double>("ui.admittance_value");
-    this->declare_parameter<double>("ui.force_reference");
-    this->declare_parameter<double>("ui.max_cmd_acc");
-    this->declare_parameter<double>("ui.step_value");
-    this->declare_parameter<int>("ui.gripper_position");
-    this->declare_parameter<int>("ui.gripper_speed");
-    this->declare_parameter<int>("ui.gripper_force");
+    this->declare_parameter<double>("ui.admittance_value", 20.0);
+    this->declare_parameter<double>("ui.force_reference", 6.0);
+    this->declare_parameter<double>("ui.max_cmd_acc", 0.5);
+    this->declare_parameter<double>("ui.step_value", 0.5);
+    this->declare_parameter<int>("ui.gripper_position", 100);
+    this->declare_parameter<int>("ui.gripper_speed", 100);
+    this->declare_parameter<int>("ui.gripper_force", 100);
     gripper_service_name_ = this->declare_parameter<std::string>(
       "services.gripper_control", "/ur_rtde_controller/robotiq_gripper_control");
 
@@ -313,6 +326,12 @@ public:
         has_battery_state_ = true;
       });
 
+    joy_active_sub_ = create_subscription<std_msgs::msg::Bool>(
+      joy_active_topic_, 10, [this](std_msgs::msg::Bool::SharedPtr msg){
+        std::lock_guard<std::mutex> lock(mutex_);
+        mode_joy_on_ = msg->data;
+      });
+
     auto bool_srv = [this](const std::string &name) {
       return this->create_client<std_srvs::srv::SetBool>(name);
     };
@@ -323,6 +342,8 @@ public:
     jacobian_client_ = bool_srv(jacobian_service_name_);
     realtime_client_ = bool_srv(joints_realtime_service_name_);
     mobile_emergency_stop_client_ = bool_srv(mobile_emergency_stop_service_name_);
+    joy_enable_client_ = bool_srv(joy_enable_service_name_);
+    zero_ft_client_ = this->create_client<std_srvs::srv::Trigger>(zero_ft_service_name_);
     gripper_client_ = this->create_client<ur_rtde_controller::srv::RobotiQGripperControl>(gripper_service_name_);
 
     force_ref_client_ = this->create_client<admittance_controller::srv::SetFloat64>(
@@ -390,13 +411,60 @@ public:
     SDL_Quit();
   }
 
+  SDL_Rect scaleRect(const SDL_Rect &r) const {
+    const int x = static_cast<int>(std::lround(static_cast<float>(r.x) * ui_scale_));
+    const int y = static_cast<int>(std::lround(static_cast<float>(r.y) * ui_scale_));
+    const int w = std::max(1, static_cast<int>(std::lround(static_cast<float>(r.w) * ui_scale_)));
+    const int h = std::max(1, static_cast<int>(std::lround(static_cast<float>(r.h) * ui_scale_)));
+    return SDL_Rect{x, y, w, h};
+  }
+
+  int fontScale(int base) const {
+    return std::max(1, static_cast<int>(std::lround(static_cast<float>(base) * ui_scale_)));
+  }
+
+  int textPixelWidth(const std::string &text, int scale) const {
+    return static_cast<int>(text.size()) * 6 * std::max(1, scale);
+  }
+
+  std::string ellipsizeText(const std::string &text, int max_width_px, int scale) const {
+    if (max_width_px <= 0) {
+      return "";
+    }
+    if (textPixelWidth(text, scale) <= max_width_px) {
+      return text;
+    }
+    std::string out = text;
+    const std::string dots = "...";
+    while (!out.empty() && textPixelWidth(out + dots, scale) > max_width_px) {
+      out.pop_back();
+    }
+    return out + dots;
+  }
+
+  void updateUiScaleAndLayout() {
+    SDL_GetWindowSize(window_, &ui_win_w_, &ui_win_h_);
+    const float sx = static_cast<float>(ui_win_w_) / static_cast<float>(kWidth);
+    const float sy = static_cast<float>(ui_win_h_) / static_cast<float>(kHeight);
+    ui_scale_ = std::max(0.1f, std::min(sx, sy));
+
+    for (auto &b : buttons_) {
+      b.rect = scaleRect(b.base_rect);
+    }
+    for (auto &f : text_fields_) {
+      f.rect = scaleRect(f.base_rect);
+    }
+  }
+
   void run() {
     bool running = true;
     while (running && rclcpp::ok()) {
+      updateUiScaleAndLayout();
       SDL_Event event;
       while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT) {
           running = false;
+          rclcpp::shutdown();
           break;
         }
         if (event.type == SDL_TEXTINPUT) {
@@ -424,8 +492,12 @@ public:
   }
 
 private:
-  static constexpr int kWidth = 1560;
-  static constexpr int kHeight = 980;
+  static constexpr int kWidth = 1480;
+  static constexpr int kHeight = 920;
+
+  float ui_scale_{1.0f};
+  int ui_win_w_{kWidth};
+  int ui_win_h_{kHeight};
 
   std::mutex mutex_;
 
@@ -436,6 +508,8 @@ private:
   std::string jacobian_service_name_;
   std::string joints_realtime_service_name_;
   std::string mobile_emergency_stop_service_name_;
+  std::string joy_enable_service_name_;
+  std::string zero_ft_service_name_;
   std::string gripper_service_name_;
 
   std::string joint_states_topic_;
@@ -445,6 +519,7 @@ private:
   std::string whole_body_cmd_topic_;
   std::string emergency_topic_;
   std::string battery_topic_;
+  std::string joy_active_topic_;
 
   std::string arm_ip_;
   std::string mobile_ip_;
@@ -463,6 +538,7 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr whole_body_cmd_sub_;
   rclcpp::Subscription<neo_msgs2::msg::EmergencyStopState>::SharedPtr emergency_sub_;
   rclcpp::Subscription<sensor_msgs::msg::BatteryState>::SharedPtr battery_sub_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr joy_active_sub_;
 
   rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr admittance_client_;
   rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr push_client_;
@@ -470,6 +546,8 @@ private:
   rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr jacobian_client_;
   rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr realtime_client_;
   rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr mobile_emergency_stop_client_;
+  rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr joy_enable_client_;
+  rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr zero_ft_client_;
   rclcpp::Client<ur_rtde_controller::srv::RobotiQGripperControl>::SharedPtr gripper_client_;
 
   rclcpp::Client<admittance_controller::srv::SetFloat64>::SharedPtr force_ref_client_;
@@ -500,8 +578,8 @@ private:
   double arm_ping_avg_5s_{0.0};
   double mobile_robot_ping_avg_5s_{0.0};
   std::chrono::steady_clock::time_point last_ping_check_{};
-  std::deque<std::pair<std::chrono::steady_clock::time_point, bool>> arm_ping_samples_;
-  std::deque<std::pair<std::chrono::steady_clock::time_point, bool>> mobile_robot_ping_samples_;
+  std::deque<std::pair<std::chrono::steady_clock::time_point, double>> arm_ping_samples_;
+  std::deque<std::pair<std::chrono::steady_clock::time_point, double>> mobile_robot_ping_samples_;
 
   bool has_emergency_state_{false};
   bool emergency_button_stop_{false};
@@ -521,6 +599,7 @@ private:
   bool mode_arm_jac_on_{false};
   bool mode_arm_jts_on_{false};
   bool mode_emergency_on_{true};
+  bool mode_joy_on_{false};
 
   enum class FieldId {
     AdmittanceValue = 0,
@@ -534,81 +613,93 @@ private:
 
   void buildButtons() {
     auto addBtn = [this](const std::string &label, int x, int y, int w, int h, SDL_Color c, std::function<void()> cb) {
-      buttons_.push_back(UiButton{label, SDL_Rect{x, y, w, h}, std::move(cb), c});
+      const SDL_Rect base_rect{x, y, w, h};
+      buttons_.push_back(UiButton{label, base_rect, base_rect, std::move(cb), c});
     };
 
-    addBtn("Adm on", 810, 70, 140, 34, {40, 120, 40, 255}, [this]{
+    addBtn("Adm on", 820, 70, 120, 34, {40, 120, 40, 255}, [this]{
       if (callSetBool(admittance_client_, true, "Adm on")) { mode_adm_on_ = true; }
     });
-    addBtn("Adm off", 960, 70, 140, 34, {120, 40, 40, 255}, [this]{
+    addBtn("Adm off", 950, 70, 140, 34, {120, 40, 40, 255}, [this]{
       if (callSetBool(admittance_client_, false, "Adm off")) { mode_adm_on_ = false; }
     });
 
-    addBtn("Push on", 810, 112, 140, 34, {40, 120, 40, 255}, [this]{
+    addBtn("Push on", 820, 112, 120, 34, {40, 120, 40, 255}, [this]{
       if (callSetBool(push_client_, true, "Push on")) { mode_push_on_ = true; }
     });
-    addBtn("Push off", 960, 112, 140, 34, {120, 40, 40, 255}, [this]{
+    addBtn("Push off", 950, 112, 140, 34, {120, 40, 40, 255}, [this]{
       if (callSetBool(push_client_, false, "Push off")) { mode_push_on_ = false; }
     });
 
-    addBtn("Wbqp on", 810, 154, 140, 34, {40, 120, 40, 255}, [this]{
+    addBtn("Wbqp on", 820, 154, 120, 34, {40, 120, 40, 255}, [this]{
       if (callSetBool(wbqp_client_, true, "Wbqp on")) { mode_wbqp_on_ = true; }
     });
-    addBtn("Wbqp off", 960, 154, 140, 34, {120, 40, 40, 255}, [this]{
+    addBtn("Wbqp off", 950, 154, 140, 34, {120, 40, 40, 255}, [this]{
       if (callSetBool(wbqp_client_, false, "Wbqp off")) { mode_wbqp_on_ = false; }
     });
 
-    addBtn("Arm Jac on", 810, 196, 140, 34, {40, 120, 40, 255}, [this]{
+    addBtn("Arm Jac on", 820, 196, 120, 34, {40, 120, 40, 255}, [this]{
       if (callSetBool(jacobian_client_, true, "Arm jac on")) { mode_arm_jac_on_ = true; }
     });
-    addBtn("Arm Jac off", 960, 196, 140, 34, {120, 40, 40, 255}, [this]{
+    addBtn("Arm Jac off", 950, 196, 140, 34, {120, 40, 40, 255}, [this]{
       if (callSetBool(jacobian_client_, false, "Arm jac off")) { mode_arm_jac_on_ = false; }
     });
 
-    addBtn("Arm Jts on", 810, 238, 140, 34, {40, 120, 40, 255}, [this]{
+    addBtn("Arm Jts on", 820, 238, 120, 34, {40, 120, 40, 255}, [this]{
       if (callSetBool(realtime_client_, true, "Arm jts on")) { mode_arm_jts_on_ = true; }
     });
-    addBtn("Arm Jts off", 960, 238, 140, 34, {120, 40, 40, 255}, [this]{
+    addBtn("Arm Jts off", 950, 238, 140, 34, {120, 40, 40, 255}, [this]{
       if (callSetBool(realtime_client_, false, "Arm jts off")) { mode_arm_jts_on_ = false; }
     });
 
-    addBtn("Emerg on", 1110, 238, 140, 34, {120, 60, 40, 255}, [this]{
+    addBtn("Joy on", 820, 280, 120, 34, {40, 120, 40, 255}, [this]{
+      (void)callSetBool(joy_enable_client_, true, "Joy on");
+    });
+    addBtn("Joy off", 950, 280, 140, 34, {120, 40, 40, 255}, [this]{
+      (void)callSetBool(joy_enable_client_, false, "Joy off");
+    });
+
+    addBtn("Emerg on", 820, 322, 120, 34, {120, 60, 40, 255}, [this]{
       if (callSetBool(mobile_emergency_stop_client_, true, "Emerg on")) { mode_emergency_on_ = true; }
     });
-    addBtn("Emerg off", 1260, 238, 140, 34, {40, 120, 40, 255}, [this]{
+    addBtn("Emerg off", 950, 322, 140, 34, {40, 120, 40, 255}, [this]{
       if (callSetBool(mobile_emergency_stop_client_, false, "Emerg off")) { mode_emergency_on_ = false; }
     });
 
-    addBtn("Val -", 810, 318, 92, 30, {70,70,120,255}, [this]{ admittance_value_ -= step_value_; });
-    addBtn("Val +", 912, 318, 92, 30, {70,70,120,255}, [this]{ admittance_value_ += step_value_; });
+    addBtn("Zero ft sensor", 820, 364, 270, 34, {100, 90, 40, 255}, [this]{
+      callTrigger(zero_ft_client_, "Zero ft sensor");
+    });
 
-    addBtn("M pos", 810, 360, 92, 30, {80,80,80,255}, [this]{ publishUniform(m_adm_pos_pub_, admittance_value_, "M pos"); });
-    addBtn("B pos", 910, 360, 92, 30, {80,80,80,255}, [this]{ publishUniform(b_adm_pos_pub_, admittance_value_, "B pos"); });
-    addBtn("K pos", 1010, 360, 92, 30, {80,80,80,255}, [this]{ publishUniform(k_adm_pos_pub_, admittance_value_, "K pos"); });
-
-    addBtn("M rot", 810, 398, 92, 30, {80,80,80,255}, [this]{ publishUniform(m_adm_rot_pub_, admittance_value_, "M rot"); });
-    addBtn("B rot", 910, 398, 92, 30, {80,80,80,255}, [this]{ publishUniform(b_adm_rot_pub_, admittance_value_, "B rot"); });
-    addBtn("K rot", 1010, 398, 92, 30, {80,80,80,255}, [this]{ publishUniform(k_adm_rot_pub_, admittance_value_, "K rot"); });
-
-    addBtn("Fref -", 810, 476, 92, 30, {70,70,120,255}, [this]{ force_reference_ -= step_value_; });
-    addBtn("Fref +", 912, 476, 92, 30, {70,70,120,255}, [this]{ force_reference_ += step_value_; });
-    addBtn("Send fref", 1014, 476, 134, 30, {50,100,130,255}, [this]{ callSetFloat(force_ref_client_, force_reference_, "Set force ref"); });
-
-    addBtn("Acc -", 810, 514, 92, 30, {70,70,120,255}, [this]{ max_cmd_acc_ = std::max(0.0, max_cmd_acc_ - step_value_); });
-    addBtn("Acc +", 912, 514, 92, 30, {70,70,120,255}, [this]{ max_cmd_acc_ += step_value_; });
-    addBtn("Send acc", 1014, 514, 134, 30, {50,100,130,255}, [this]{ callSetFloat(max_acc_client_, max_cmd_acc_, "Set max acc"); });
-
-    addBtn("Grip open", 1110, 318, 130, 30, {40,120,40,255}, [this]{
+    addBtn("Grip open", 820, 486, 130, 34, {40,120,40,255}, [this]{
       gripper_position_ = ur_rtde_controller::srv::RobotiQGripperControl::Request::GRIPPER_OPENED;
       callGripper(gripper_position_, gripper_speed_, gripper_force_, "Gripper open");
     });
-    addBtn("Grip close", 1250, 318, 130, 30, {120,40,40,255}, [this]{
+    addBtn("Grip close", 960, 486, 130, 34, {120,40,40,255}, [this]{
       gripper_position_ = 0;
       callGripper(gripper_position_, gripper_speed_, gripper_force_, "Gripper close");
     });
-    addBtn("Grip send", 1390, 318, 130, 30, {50,100,130,255}, [this]{
+    addBtn("Grip send", 1100, 486, 220, 34, {50,100,130,255}, [this]{
       callGripper(gripper_position_, gripper_speed_, gripper_force_, "Gripper set");
     });
+
+    addBtn("Val -", 820, 727, 90, 32, {70,70,120,255}, [this]{ admittance_value_ -= step_value_; });
+    addBtn("Val +", 916, 727, 90, 32, {70,70,120,255}, [this]{ admittance_value_ += step_value_; });
+
+    addBtn("M pos", 820, 763, 90, 32, {80,80,80,255}, [this]{ publishUniform(m_adm_pos_pub_, admittance_value_, "M pos"); });
+    addBtn("B pos", 916, 763, 90, 32, {80,80,80,255}, [this]{ publishUniform(b_adm_pos_pub_, admittance_value_, "B pos"); });
+    addBtn("K pos", 1012, 763, 90, 32, {80,80,80,255}, [this]{ publishUniform(k_adm_pos_pub_, admittance_value_, "K pos"); });
+
+    addBtn("M rot", 820, 799, 90, 32, {80,80,80,255}, [this]{ publishUniform(m_adm_rot_pub_, admittance_value_, "M rot"); });
+    addBtn("B rot", 916, 799, 90, 32, {80,80,80,255}, [this]{ publishUniform(b_adm_rot_pub_, admittance_value_, "B rot"); });
+    addBtn("K rot", 1012, 799, 90, 32, {80,80,80,255}, [this]{ publishUniform(k_adm_rot_pub_, admittance_value_, "K rot"); });
+
+    addBtn("Fref -", 820, 835, 90, 32, {70,70,120,255}, [this]{ force_reference_ -= step_value_; });
+    addBtn("Fref +", 916, 835, 90, 32, {70,70,120,255}, [this]{ force_reference_ += step_value_; });
+    addBtn("Send Fref", 1012, 835, 110, 32, {50,100,130,255}, [this]{ callSetFloat(force_ref_client_, force_reference_, "Set force ref"); });
+
+    addBtn("Acc -", 820, 871, 90, 32, {70,70,120,255}, [this]{ max_cmd_acc_ = std::max(0.0, max_cmd_acc_ - step_value_); });
+    addBtn("Acc +", 916, 871, 90, 32, {70,70,120,255}, [this]{ max_cmd_acc_ += step_value_; });
+    addBtn("Send acc", 1012, 871, 110, 32, {50,100,130,255}, [this]{ callSetFloat(max_acc_client_, max_cmd_acc_, "Set max acc"); });
 
     buildTextFields();
   }
@@ -618,11 +709,12 @@ private:
 
     auto addField = [this](const std::string &label, int x, int y, int w, int h, const std::string &text,
                            std::function<void(const std::string&)> on_apply) {
-      text_fields_.push_back(UiTextField{label, SDL_Rect{x, y, w, h}, text, false, std::move(on_apply)});
+      const SDL_Rect base_rect{x, y, w, h};
+      text_fields_.push_back(UiTextField{label, base_rect, base_rect, text, false, std::move(on_apply)});
     };
 
     addField(
-      "Adm value", 1260, 318, 260, 30, fmt(admittance_value_, 2),
+      "Adm value", 1180, 742, 340, 34, fmt(admittance_value_, 2),
       [this](const std::string &s){
         double v;
         if (parseDouble(s, v)) {
@@ -634,7 +726,7 @@ private:
       }
     );
     addField(
-      "Force ref", 1260, 442, 260, 30, fmt(force_reference_, 2),
+      "Force ref", 1180, 784, 340, 34, fmt(force_reference_, 2),
       [this](const std::string &s){
         double v;
         if (parseDouble(s, v)) {
@@ -646,7 +738,7 @@ private:
       }
     );
     addField(
-      "Max acc", 1260, 546, 260, 30, fmt(max_cmd_acc_, 2),
+      "Max acc", 1180, 826, 340, 34, fmt(max_cmd_acc_, 2),
       [this](const std::string &s){
         double v;
         if (parseDouble(s, v)) {
@@ -658,7 +750,7 @@ private:
       }
     );
     addField(
-      "Step", 1260, 590, 260, 30, fmt(step_value_, 2),
+      "Step", 1180, 868, 340, 34, fmt(step_value_, 2),
       [this](const std::string &s){
         double v;
         if (parseDouble(s, v) && v > 0.0) {
@@ -670,7 +762,7 @@ private:
       }
     );
     addField(
-      "Grip pos", 1110, 360, 130, 30, std::to_string(gripper_position_),
+      "Grip pos", 820, 528, 260, 34, std::to_string(gripper_position_),
       [this](const std::string &s){
         int v;
         if (parseIntRange(s, 0, 100, v)) {
@@ -682,7 +774,7 @@ private:
       }
     );
     addField(
-      "Grip speed", 1250, 360, 130, 30, std::to_string(gripper_speed_),
+      "Grip speed", 820, 570, 260, 34, std::to_string(gripper_speed_),
       [this](const std::string &s){
         int v;
         if (parseIntRange(s, 0, 100, v)) {
@@ -694,7 +786,7 @@ private:
       }
     );
     addField(
-      "Grip force", 1390, 360, 130, 30, std::to_string(gripper_force_),
+      "Grip force", 820, 612, 260, 34, std::to_string(gripper_force_),
       [this](const std::string &s){
         int v;
         if (parseIntRange(s, 0, 100, v)) {
@@ -740,6 +832,29 @@ private:
 
     client->async_send_request(req);
     status_line_ = "Request sent: " + name + "=" + fmt(value, 2);
+  }
+
+  void callTrigger(
+      const rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr &client,
+      const std::string &name) {
+    if (!client) {
+      status_line_ = "Service client missing: " + name;
+      return;
+    }
+
+    auto req = std::make_shared<std_srvs::srv::Trigger::Request>();
+    if (!client->wait_for_service(std::chrono::milliseconds(120))) {
+      status_line_ = "Service unavailable: " + name;
+      return;
+    }
+
+    client->async_send_request(
+      req,
+      [this, name](rclcpp::Client<std_srvs::srv::Trigger>::SharedFuture response_future) {
+        const auto &resp = response_future.get();
+        status_line_ = name + std::string(": ") + (resp->success ? "ok" : "fail");
+      });
+    status_line_ = "Request sent: " + name;
   }
 
   void callGripper(int position, int speed, int force, const std::string &name) {
@@ -793,31 +908,45 @@ private:
     SDL_RenderFillRect(renderer_, &r);
     SDL_SetRenderDrawColor(renderer_, 90, 90, 100, 255);
     SDL_RenderDrawRect(renderer_, &r);
-    drawPixelText(r.x + 8, r.y + 8, title, 2, SDL_Color{210, 210, 220, 255});
+    const int s = fontScale(2);
+    const int margin = std::max(4, fontScale(4));
+    drawPixelText(
+      r.x + margin,
+      r.y + margin,
+      ellipsizeText(title, r.w - 2 * margin, s),
+      s,
+      SDL_Color{210, 210, 220, 255});
   }
 
   void drawModeIndicator(int x, int y, const std::string &label, bool active) {
-    SDL_Rect box{x, y, 210, 28};
+    const SDL_Rect box = scaleRect(SDL_Rect{x, y, 210, 28});
     const SDL_Color fill = active ? SDL_Color{35, 110, 50, 255} : SDL_Color{55, 55, 60, 255};
     SDL_SetRenderDrawColor(renderer_, fill.r, fill.g, fill.b, fill.a);
     SDL_RenderFillRect(renderer_, &box);
     SDL_SetRenderDrawColor(renderer_, 120, 120, 120, 255);
     SDL_RenderDrawRect(renderer_, &box);
+    const int s = fontScale(2);
+    const int margin = std::max(4, fontScale(3));
+    const std::string txt = label + ": " + (active ? "on" : "off");
     drawPixelText(
-      x + 6,
-      y + 7,
-      label + ": " + (active ? "on" : "off"),
-      2,
+      box.x + margin,
+      box.y + margin,
+      ellipsizeText(txt, box.w - 2 * margin, s),
+      s,
       active ? SDL_Color{160, 255, 160, 255} : SDL_Color{190, 190, 190, 255});
   }
 
-  void drawTwistLine(int x, int y, const std::string &name, const geometry_msgs::msg::Twist &t) {
-    drawPixelText(x, y, name + " l(" + fmt(t.linear.x) + "," + fmt(t.linear.y) + "," + fmt(t.linear.z) +
-                        ") a(" + fmt(t.angular.x) + "," + fmt(t.angular.y) + "," + fmt(t.angular.z) + ")",
-                 2, SDL_Color{220, 220, 220, 255});
+  void drawTwistLine(int x, int y, int max_width, const std::string &name, const geometry_msgs::msg::Twist &t) {
+    const int s = fontScale(2);
+    const int xx = scaleRect(SDL_Rect{x, y, 0, 0}).x;
+    const int yy = scaleRect(SDL_Rect{x, y, 0, 0}).y;
+    const std::string txt = name + " l(" + fmt(t.linear.x) + "," + fmt(t.linear.y) + "," + fmt(t.linear.z) +
+                            ") a(" + fmt(t.angular.x) + "," + fmt(t.angular.y) + "," + fmt(t.angular.z) + ")";
+    drawPixelText(xx, yy, ellipsizeText(txt, std::max(10, static_cast<int>(std::lround(max_width * ui_scale_))), s),
+                  s, SDL_Color{220, 220, 220, 255});
   }
 
-  void drawJointStateLine(int x, int y, const std::string &name, const sensor_msgs::msg::JointState &js, bool velocity_only = false) {
+  void drawJointStateLine(int x, int y, int max_width, const std::string &name, const sensor_msgs::msg::JointState &js, bool velocity_only = false) {
     std::string line = name + " ";
     const auto &vals = velocity_only ? js.velocity : js.position;
     const size_t n = std::min<size_t>(vals.size(), 6);
@@ -829,7 +958,11 @@ private:
       }
     }
     line += "]";
-    drawPixelText(x, y, line, 2, SDL_Color{220, 220, 220, 255});
+    const int s = fontScale(2);
+    const int xx = scaleRect(SDL_Rect{x, y, 0, 0}).x;
+    const int yy = scaleRect(SDL_Rect{x, y, 0, 0}).y;
+    drawPixelText(xx, yy, ellipsizeText(line, std::max(10, static_cast<int>(std::lround(max_width * ui_scale_))), s),
+                  s, SDL_Color{220, 220, 220, 255});
   }
 
   void render() {
@@ -854,6 +987,7 @@ private:
     bool mode_arm_jac_on = false;
     bool mode_arm_jts_on = false;
     bool mode_emergency_on = true;
+    bool mode_joy_on = false;
 
     {
       std::lock_guard<std::mutex> lock(mutex_);
@@ -878,71 +1012,126 @@ private:
       mode_arm_jac_on = mode_arm_jac_on_;
       mode_arm_jts_on = mode_arm_jts_on_;
       mode_emergency_on = mode_emergency_on_;
+      mode_joy_on = mode_joy_on_;
     }
 
     SDL_SetRenderDrawColor(renderer_, 18, 18, 22, 255);
     SDL_RenderClear(renderer_);
 
-    SDL_Rect panel_joint{20, 20, 760, 290};
-    SDL_Rect panel_cmd{20, 322, 760, 290};
-    SDL_Rect panel_status{20, 624, 760, 336};
-    SDL_Rect panel_ctrl{790, 20, 750, 620};
-    SDL_Rect panel_gripper{1098, 282, 432, 124};
-    SDL_Rect panel_ping{790, 650, 365, 310};
-    SDL_Rect panel_mobile_state{1175, 650, 365, 310};
+    const SDL_Rect panel_joint = scaleRect(SDL_Rect{20, 20, 760, 170});
+    const SDL_Rect panel_cmd = scaleRect(SDL_Rect{20, 200, 760, 170});
+    const SDL_Rect panel_status = scaleRect(SDL_Rect{20, 380, 760, 170});
+    const SDL_Rect panel_ping = scaleRect(SDL_Rect{20, 560, 760, 140});
+    const SDL_Rect panel_mobile_state = scaleRect(SDL_Rect{20, 710, 760, 200});
+
+    const SDL_Rect panel_ctrl = scaleRect(SDL_Rect{800, 20, 740, 410});
+    const SDL_Rect panel_gripper = scaleRect(SDL_Rect{800, 440, 740, 240});
+    const SDL_Rect panel_params = scaleRect(SDL_Rect{800, 690, 740, 220});
 
     drawPanel(panel_joint, "JOINT STATES");
     drawPanel(panel_cmd, "COMMAND TOPICS");
     drawPanel(panel_ctrl, "CONTROL BUTTONS");
     drawPanel(panel_gripper, "GRIPPER CONTROL");
-    drawPanel(panel_status, "STATUS");
+    drawPanel(panel_params, "ADMITTANCE PARAMS");
+    drawPanel(panel_status, "GUI STATUS");
     drawPanel(panel_ping, "PING STATUS");
-    drawPanel(panel_mobile_state, "MOBILE STATE");
+    drawPanel(panel_mobile_state, "MOBILE ROBOT STATUS");
 
-    drawJointStateLine(36, 58, "Joint pos", joint_state, false);
-    drawJointStateLine(36, 92, "Joint vel", joint_state, true);
-    drawJointStateLine(36, 126, "Arm js cmd", arm_js_cmd, true);
+    const int panel_margin = std::max(6, fontScale(6));
 
-    drawTwistLine(36, 360, "Arm cmd", arm_cmd);
-    drawJointStateLine(36, 392, "Arm js cmd", arm_js_cmd, true);
-    drawTwistLine(36, 424, "Mobile cmd", mobile_cmd);
-    drawTwistLine(36, 456, "Whole cmd", whole_cmd);
+    SDL_Rect clip_joint{panel_joint.x + panel_margin, panel_joint.y + 30 * fontScale(1),
+                        panel_joint.w - 2 * panel_margin, panel_joint.h - 36 * fontScale(1)};
+    SDL_RenderSetClipRect(renderer_, &clip_joint);
+    drawJointStateLine(36, 58, 730, "Joint pos", joint_state, false);
+    drawJointStateLine(36, 92, 730, "Joint vel", joint_state, true);
 
-    drawPixelText(812, 286, "Adm value: " + fmt(admittance_value_, 2), 2, SDL_Color{220,220,180,255});
-    drawPixelText(812, 442, "Force ref: " + fmt(force_reference_, 2), 2, SDL_Color{220,220,180,255});
-    drawPixelText(812, 526, "Max acc: " + fmt(max_cmd_acc_, 2), 2, SDL_Color{220,220,180,255});
-    drawPixelText(812, 570, "Step: " + fmt(step_value_,2), 2, SDL_Color{220,220,180,255});
-    drawModeIndicator(1260, 70, "Admittance", mode_adm_on);
-    drawModeIndicator(1260, 104, "Pushing", mode_push_on);
-    drawModeIndicator(1260, 138, "Wbqp", mode_wbqp_on);
-    drawModeIndicator(1260, 172, "Arm jac", mode_arm_jac_on);
-    drawModeIndicator(1260, 206, "Arm jts", mode_arm_jts_on);
-    drawModeIndicator(1260, 240, "Emergency", mode_emergency_on);
+    SDL_Rect clip_cmd{panel_cmd.x + panel_margin, panel_cmd.y + 30 * fontScale(1),
+                      panel_cmd.w - 2 * panel_margin, panel_cmd.h - 36 * fontScale(1)};
+    SDL_RenderSetClipRect(renderer_, &clip_cmd);
+    drawTwistLine(36, 236, 730, "Arm cmd", arm_cmd);
+    drawJointStateLine(36, 268, 730, "Arm js cmd", arm_js_cmd, true);
+    drawTwistLine(36, 300, 730, "Mobile cmd", mobile_cmd);
+    drawTwistLine(36, 332, 730, "Whole cmd", whole_cmd);
+    SDL_RenderSetClipRect(renderer_, nullptr);
+
+    const int s2 = fontScale(2);
+    // Current values are shown in the editable text fields; extra yellow summary labels removed.
+    drawModeIndicator(1148, 70, "Admittance", mode_adm_on);
+    drawModeIndicator(1148, 112, "Pushing", mode_push_on);
+    drawModeIndicator(1148, 154, "Wbqp", mode_wbqp_on);
+    drawModeIndicator(1148, 196, "Arm jac", mode_arm_jac_on);
+    drawModeIndicator(1148, 238, "Arm jts", mode_arm_jts_on);
+    drawModeIndicator(1148, 280, "Joy input", mode_joy_on);
+    drawModeIndicator(1148, 322, "Emergency", mode_emergency_on);
 
     for (const auto &b : buttons_) {
       SDL_SetRenderDrawColor(renderer_, b.color.r, b.color.g, b.color.b, b.color.a);
       SDL_RenderFillRect(renderer_, &b.rect);
       SDL_SetRenderDrawColor(renderer_, 170, 170, 170, 255);
       SDL_RenderDrawRect(renderer_, &b.rect);
-      drawPixelText(b.rect.x + 8, b.rect.y + 9, b.label, 2, SDL_Color{235, 235, 235, 255});
+      const int margin = std::max(4, fontScale(4));
+      drawPixelText(b.rect.x + margin, b.rect.y + margin,
+                    ellipsizeText(b.label, b.rect.w - 2 * margin, s2),
+                    s2, SDL_Color{235, 235, 235, 255});
     }
 
+    SDL_Rect clip_right_controls{
+      panel_gripper.x + panel_margin,
+      panel_gripper.y + 30 * fontScale(1),
+      panel_gripper.w - 2 * panel_margin,
+      (panel_params.y + panel_params.h) - (panel_gripper.y + 30 * fontScale(1)) - panel_margin
+    };
+    SDL_RenderSetClipRect(renderer_, &clip_right_controls);
     drawTextFields();
+    SDL_RenderSetClipRect(renderer_, nullptr);
 
-    drawPixelText(36, 662, "STATUS", 2, SDL_Color{180, 200, 220, 255});
-    drawPixelText(36, 694, status_line_, 2, SDL_Color{240, 220, 130, 255});
-    drawPixelText(36, 728, "Click a field to edit.", 2, SDL_Color{200, 200, 200, 255});
-    drawPixelText(36, 762, "Press enter to apply.", 2, SDL_Color{200, 200, 200, 255});
+    SDL_Rect clip_status{panel_status.x + panel_margin, panel_status.y + 30 * fontScale(1),
+                         panel_status.w - 2 * panel_margin, panel_status.h - 36 * fontScale(1)};
+    SDL_RenderSetClipRect(renderer_, &clip_status);
+    drawPixelText(scaleRect(SDL_Rect{36, 430, 0, 0}).x, scaleRect(SDL_Rect{36, 430, 0, 0}).y, "GUI STATUS", s2, SDL_Color{180, 200, 220, 255});
+    drawPixelText(scaleRect(SDL_Rect{36, 462, 0, 0}).x, scaleRect(SDL_Rect{36, 462, 0, 0}).y,
+                  ellipsizeText(status_line_, panel_status.w - 2 * panel_margin, s2), s2, SDL_Color{240, 220, 130, 255});
+    drawPixelText(scaleRect(SDL_Rect{36, 494, 0, 0}).x, scaleRect(SDL_Rect{36, 494, 0, 0}).y,
+                  "Click a field to edit.", s2, SDL_Color{200, 200, 200, 255});
+    drawPixelText(scaleRect(SDL_Rect{36, 526, 0, 0}).x, scaleRect(SDL_Rect{36, 526, 0, 0}).y,
+                  "Press enter to apply.", s2, SDL_Color{200, 200, 200, 255});
+    SDL_RenderSetClipRect(renderer_, nullptr);
 
-    drawPixelText(806, 722, "Arm avg 5s: " + fmt(arm_ping_avg_5s * 100.0, 1) + "%", 2, SDL_Color{200, 200, 200, 255});
-    drawPixelText(806, 772, "Mobile robot avg 5s: " + fmt(mobile_robot_ping_avg_5s * 100.0, 1) + "%", 2, SDL_Color{200, 200, 200, 255});
+    SDL_Rect clip_ping{panel_ping.x + panel_margin, panel_ping.y + 30 * fontScale(1),
+                       panel_ping.w - 2 * panel_margin, panel_ping.h - 36 * fontScale(1)};
+    SDL_RenderSetClipRect(renderer_, &clip_ping);
+    drawPixelText(scaleRect(SDL_Rect{36, 610, 0, 0}).x, scaleRect(SDL_Rect{36, 610, 0, 0}).y,
+                  ellipsizeText("Arm mean 5s: " + (arm_ping_avg_5s >= 0.0 ? fmt(arm_ping_avg_5s, 2) + " ms" : std::string("n/a")),
+                                panel_ping.w - 2 * panel_margin, s2),
+                  s2, SDL_Color{200, 200, 200, 255});
+    drawPixelText(scaleRect(SDL_Rect{36, 650, 0, 0}).x, scaleRect(SDL_Rect{36, 650, 0, 0}).y,
+                  ellipsizeText("Mobile mean 5s: " + (mobile_robot_ping_avg_5s >= 0.0 ? fmt(mobile_robot_ping_avg_5s, 2) + " ms" : std::string("n/a")),
+                                panel_ping.w - 2 * panel_margin, s2),
+                  s2, SDL_Color{200, 200, 200, 255});
+    SDL_RenderSetClipRect(renderer_, nullptr);
 
-    drawPixelText(1191, 688, std::string("Button stop: ") + (has_emergency ? (button_stop ? "true" : "false") : "n/a"), 2, SDL_Color{200, 200, 200, 255});
-    drawPixelText(1191, 722, std::string("Scanner stop: ") + (has_emergency ? (scanner_stop ? "true" : "false") : "n/a"), 2, SDL_Color{200, 200, 200, 255});
-    drawPixelText(1191, 772, std::string("Voltage: ") + (has_battery ? fmt(battery_voltage, 3) : "n/a"), 2, SDL_Color{200, 200, 200, 255});
-    drawPixelText(1191, 806, std::string("Current: ") + (has_battery ? fmt(battery_current, 3) : "n/a"), 2, SDL_Color{200, 200, 200, 255});
-    drawPixelText(1191, 840, std::string("Temperature: ") + (has_battery ? fmt(battery_temperature, 3) : "n/a"), 2, SDL_Color{200, 200, 200, 255});
-    drawPixelText(1191, 874, std::string("Percentage: ") + (has_battery ? fmt(battery_percentage * 100.0, 1) + "%" : "n/a"), 2, SDL_Color{200, 200, 200, 255});
+    SDL_Rect clip_mobile{panel_mobile_state.x + panel_margin, panel_mobile_state.y + 30 * fontScale(1),
+                         panel_mobile_state.w - 2 * panel_margin, panel_mobile_state.h - 36 * fontScale(1)};
+    SDL_RenderSetClipRect(renderer_, &clip_mobile);
+    drawPixelText(scaleRect(SDL_Rect{36, 750, 0, 0}).x, scaleRect(SDL_Rect{36, 750, 0, 0}).y,
+                  ellipsizeText(std::string("Button stop: ") + (has_emergency ? (button_stop ? "true" : "false") : "n/a"), panel_mobile_state.w - 2 * panel_margin, s2),
+                  s2, SDL_Color{200, 200, 200, 255});
+    drawPixelText(scaleRect(SDL_Rect{36, 782, 0, 0}).x, scaleRect(SDL_Rect{36, 782, 0, 0}).y,
+                  ellipsizeText(std::string("Scanner stop: ") + (has_emergency ? (scanner_stop ? "true" : "false") : "n/a"), panel_mobile_state.w - 2 * panel_margin, s2),
+                  s2, SDL_Color{200, 200, 200, 255});
+    drawPixelText(scaleRect(SDL_Rect{36, 814, 0, 0}).x, scaleRect(SDL_Rect{36, 814, 0, 0}).y,
+                  ellipsizeText(std::string("Voltage: ") + (has_battery ? fmt(battery_voltage, 3) : "n/a"), panel_mobile_state.w - 2 * panel_margin, s2),
+                  s2, SDL_Color{200, 200, 200, 255});
+    drawPixelText(scaleRect(SDL_Rect{36, 846, 0, 0}).x, scaleRect(SDL_Rect{36, 846, 0, 0}).y,
+                  ellipsizeText(std::string("Current: ") + (has_battery ? fmt(battery_current, 3) : "n/a"), panel_mobile_state.w - 2 * panel_margin, s2),
+                  s2, SDL_Color{200, 200, 200, 255});
+    drawPixelText(scaleRect(SDL_Rect{360, 814, 0, 0}).x, scaleRect(SDL_Rect{360, 814, 0, 0}).y,
+                  ellipsizeText(std::string("Temperature: ") + (has_battery ? fmt(battery_temperature, 3) : "n/a"), panel_mobile_state.w - 2 * panel_margin, s2),
+                  s2, SDL_Color{200, 200, 200, 255});
+    drawPixelText(scaleRect(SDL_Rect{360, 846, 0, 0}).x, scaleRect(SDL_Rect{360, 846, 0, 0}).y,
+                  ellipsizeText(std::string("Percentage: ") + (has_battery ? fmt(battery_percentage * 100.0, 1) + "%" : "n/a"), panel_mobile_state.w - 2 * panel_margin, s2),
+                  s2, SDL_Color{200, 200, 200, 255});
+    SDL_RenderSetClipRect(renderer_, nullptr);
 
     SDL_RenderPresent(renderer_);
   }
@@ -1060,18 +1249,44 @@ private:
     return true;
   }
 
-  static bool pingHost(const std::string &ip) {
+  static double pingHostMs(const std::string &ip) {
     if (!isSafeIpToken(ip)) {
-      return false;
+      return -1.0;
     }
-    const std::string cmd = "ping -c 1 -W 1 " + ip + " > /dev/null 2>&1";
-    return std::system(cmd.c_str()) == 0;
+    // Hard cap runtime so GUI shutdown stays responsive even when network is slow/unreachable.
+    const std::string cmd = "timeout 0.35s ping -c 1 -W 1 " + ip + " 2>/dev/null";
+    FILE *pipe = popen(cmd.c_str(), "r");
+    if (!pipe) {
+      return -1.0;
+    }
+    char buffer[256];
+    std::string out;
+    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+      out += buffer;
+    }
+    (void)pclose(pipe);
+
+    const std::string key = "time=";
+    const size_t pos = out.find(key);
+    if (pos == std::string::npos) {
+      return -1.0;
+    }
+    const size_t start = pos + key.size();
+    const size_t end = out.find(" ms", start);
+    if (end == std::string::npos || end <= start) {
+      return -1.0;
+    }
+    try {
+      return std::stod(out.substr(start, end - start));
+    } catch (...) {
+      return -1.0;
+    }
   }
 
   static void updatePingWindow(
-      std::deque<std::pair<std::chrono::steady_clock::time_point, bool>> &samples,
+      std::deque<std::pair<std::chrono::steady_clock::time_point, double>> &samples,
       const std::chrono::steady_clock::time_point &now,
-      bool value,
+      double value,
       double &avg_out) {
     samples.emplace_back(now, value);
     const auto window_start = now - std::chrono::seconds(5);
@@ -1080,36 +1295,37 @@ private:
     }
 
     if (samples.empty()) {
-      avg_out = 0.0;
+      avg_out = -1.0;
       return;
     }
 
-    size_t good = 0U;
+    double sum = 0.0;
+    size_t n = 0U;
     for (const auto &s : samples) {
-      if (s.second) {
-        ++good;
+      if (s.second >= 0.0) {
+        sum += s.second;
+        ++n;
       }
     }
-    avg_out = static_cast<double>(good) / static_cast<double>(samples.size());
+    avg_out = (n == 0U) ? -1.0 : (sum / static_cast<double>(n));
   }
 
   void updatePingStatus() {
     const auto now = std::chrono::steady_clock::now();
-    const int ping_period_ms = 1000;
-    (void)ping_period_ms_;
+    const int ping_period_ms = std::max(100, ping_period_ms_);
     if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_ping_check_).count() < ping_period_ms) {
       return;
     }
 
-    const bool arm_ok = pingHost(arm_ip_);
-    const bool mobile_robot_ok = pingHost(mobile_ip_);
+    const double arm_ms = pingHostMs(arm_ip_);
+    const double mobile_robot_ms = pingHostMs(mobile_ip_);
 
     {
       std::lock_guard<std::mutex> lock(mutex_);
-      arm_ping_ok_ = arm_ok;
-      mobile_robot_ping_ok_ = mobile_robot_ok;
-      updatePingWindow(arm_ping_samples_, now, arm_ok, arm_ping_avg_5s_);
-      updatePingWindow(mobile_robot_ping_samples_, now, mobile_robot_ok, mobile_robot_ping_avg_5s_);
+      arm_ping_ok_ = arm_ms >= 0.0;
+      mobile_robot_ping_ok_ = mobile_robot_ms >= 0.0;
+      updatePingWindow(arm_ping_samples_, now, arm_ms, arm_ping_avg_5s_);
+      updatePingWindow(mobile_robot_ping_samples_, now, mobile_robot_ms, mobile_robot_ping_avg_5s_);
       last_ping_check_ = now;
     }
   }
@@ -1128,12 +1344,19 @@ private:
   }
 
   void drawTextFields() {
+    const int s = fontScale(2);
     for (const auto &f : text_fields_) {
       SDL_SetRenderDrawColor(renderer_, f.active ? 70 : 45, f.active ? 90 : 45, 60, 255);
       SDL_RenderFillRect(renderer_, &f.rect);
       SDL_SetRenderDrawColor(renderer_, f.active ? 220 : 140, f.active ? 220 : 140, f.active ? 120 : 140, 255);
       SDL_RenderDrawRect(renderer_, &f.rect);
-      drawPixelText(f.rect.x + 6, f.rect.y + 8, f.label + ": " + f.text, 2, SDL_Color{235, 235, 235, 255});
+      const int margin = std::max(4, fontScale(3));
+      drawPixelText(
+        f.rect.x + margin,
+        f.rect.y + margin,
+        ellipsizeText(f.label + ": " + f.text, f.rect.w - 2 * margin, s),
+        s,
+        SDL_Color{235, 235, 235, 255});
     }
   }
 };
@@ -1141,7 +1364,33 @@ private:
 int main(int argc, char **argv) {
   rclcpp::init(argc, argv);
 
-  auto node = std::make_shared<AdmittanceGuiNode>();
+  std::vector<std::string> node_args;
+  node_args.reserve(static_cast<size_t>(std::max(0, argc - 1)));
+  bool has_params_file = false;
+  for (int i = 1; i < argc; ++i) {
+    const std::string arg = argv[i];
+    if (arg == "--params-file") {
+      has_params_file = true;
+    }
+    node_args.push_back(arg);
+  }
+
+  if (!has_params_file) {
+    try {
+      const std::string default_params_file =
+        ament_index_cpp::get_package_share_directory("admittance_controller") +
+        "/config/admittance_gui_params.yaml";
+      node_args.push_back("--ros-args");
+      node_args.push_back("--params-file");
+      node_args.push_back(default_params_file);
+    } catch (const std::exception &) {
+      // Keep running with built-in defaults if package share is not available.
+    }
+  }
+
+  rclcpp::NodeOptions options;
+  options.arguments(node_args);
+  auto node = std::make_shared<AdmittanceGuiNode>(options);
   if (!node->initGui()) {
     rclcpp::shutdown();
     return 1;
