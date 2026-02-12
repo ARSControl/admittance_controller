@@ -20,7 +20,9 @@ find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
+find_package(ur_rtde_controller REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(neo_msgs2 REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(filters_c REQUIRED)  # local package in workspace
 pkg_check_modules(SDL2 REQUIRED sdl2)
@@ -95,12 +97,13 @@ install(TARGETS admittance_menu_node DESTINATION lib/${PROJECT_NAME})
 
 # ------------ JOYSTICK MODE COMMANDER ------------
 add_executable(joy_mode_command_node src/joy_mode_command_node.cpp)
-ament_target_dependencies(joy_mode_command_node rclcpp sensor_msgs geometry_msgs)
+ament_target_dependencies(joy_mode_command_node rclcpp sensor_msgs geometry_msgs std_srvs)
 install(TARGETS joy_mode_command_node DESTINATION lib/${PROJECT_NAME})
 
 # ------------ ADMITTANCE GUI ------------
 add_executable(admittance_gui_node src/admittance_gui_node.cpp)
-ament_target_dependencies(admittance_gui_node rclcpp sensor_msgs geometry_msgs std_srvs)
+ament_target_dependencies(admittance_gui_node rclcpp sensor_msgs geometry_msgs std_srvs ur_rtde_controller)
+ament_target_dependencies(admittance_gui_node neo_msgs2)
 target_include_directories(admittance_gui_node PRIVATE ${SDL2_INCLUDE_DIRS})
 target_link_libraries(admittance_gui_node ${SDL2_LIBRARIES} "${cpp_typesupport_target}")
 install(TARGETS admittance_gui_node DESTINATION lib/${PROJECT_NAME})

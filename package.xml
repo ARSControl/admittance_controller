@@ -19,6 +19,8 @@
   <depend>sensor_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>std_srvs</depend>
+  <depend>ur_rtde_controller</depend>
+  <depend>neo_msgs2</depend>
   <depend>Eigen3</depend>
   <depend>filters</depend>
   <depend>filters_c</depend>

@@ -7,14 +7,25 @@ admittance_gui_node:
     services.wbqp_enable: "/wbqp_controller/enable_qp"
     services.jacobian_realtime_enable: "manipulator/jacobian_control_setter"
     services.joints_realtime_enable: "manipulator/joints_real_time_setter"
+    services.mobile_emergency_stop: "/mobile_platform/emergency_stop"
+    services.gripper_control: "/ur_rtde_controller/robotiq_gripper_control"
 
     topics.joint_states: "/joint_states"
     topics.arm_cmd_twist: "/manipulator/cmd_vel"
     topics.arm_cmd_joint: "/manipulator/js_cmd_vel"
     topics.mobile_cmd_twist: "/cmd_vel"
     topics.whole_body_cmd_twist: "/mobile_manipulator/cmd_vel"
+    topics.emergency_state: "/emergency_stop_state"
+    topics.battery_status: "/battery_status"
+
+    network.arm_ip: "192.168.2.10"
+    network.mobile_ip: "192.168.2.50"
+    network.ping_period_ms: 1500
 
     ui.admittance_value: 20.0
     ui.force_reference: 6.0
     ui.max_cmd_acc: 0.5
     ui.step_value: 0.5
+    ui.gripper_position: 100
+    ui.gripper_speed: 100
+    ui.gripper_force: 100

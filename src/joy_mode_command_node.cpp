@@ -9,6 +9,7 @@
 #include <geometry_msgs/msg/twist.hpp>
 #include <sensor_msgs/msg/joy.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
+#include <std_srvs/srv/set_bool.hpp>
 
 class JoyModeCommandNode : public rclcpp::Node
 {
@@ -28,6 +29,8 @@ public:
         arm_joint_pub_ = this->create_publisher<sensor_msgs::msg::JointState>(arm_joint_topic_, 10);
         mobile_twist_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(mobile_twist_topic_, 10);
         whole_body_twist_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(whole_body_twist_topic_, 10);
+        mobile_emergency_stop_client_ =
+            this->create_client<std_srvs::srv::SetBool>(mobile_emergency_stop_service_);
 
         // Fixed publish rate: 20 Hz (50 ms period)
         publish_timer_ = this->create_wall_timer(
@@ -59,6 +62,7 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr arm_joint_pub_;
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr mobile_twist_pub_;
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr whole_body_twist_pub_;
+    rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr mobile_emergency_stop_client_;
     rclcpp::TimerBase::SharedPtr publish_timer_;
 
     // Topics
@@ -67,6 +71,7 @@ private:
     std::string arm_joint_topic_;
     std::string mobile_twist_topic_;
     std::string whole_body_twist_topic_;
+    std::string mobile_emergency_stop_service_;
 
     // Joint command metadata
     std::vector<std::string> joint_names_;
@@ -141,6 +146,8 @@ private:
         arm_joint_topic_ = this->declare_parameter<std::string>("topics.arm_joint", "/manipulator/js_cmd_vel");
         mobile_twist_topic_ = this->declare_parameter<std::string>("topics.mobile_twist", "/neo/cmd_vel");
         whole_body_twist_topic_ = this->declare_parameter<std::string>("topics.whole_body_twist", "/mobile_manipulator/cmd_vel");
+        mobile_emergency_stop_service_ = this->declare_parameter<std::string>(
+            "services.mobile_emergency_stop", "/mobile_platform/emergency_stop");
 
         joint_names_ = this->declare_parameter<std::vector<std::string>>(
             "joint_names",
@@ -449,6 +456,9 @@ private:
         // STOP can be re-triggered while already in STOP: every B press must publish zero once.
         if (new_mode == Mode::STOP) {
             stop_zero_pending_ = true;
+            requestMobileEmergencyStop(true);
+        } else {
+            requestMobileEmergencyStop(false);
         }
 
         if (mode_ == new_mode) {
@@ -457,6 +467,25 @@ private:
 
         mode_ = new_mode;
         RCLCPP_INFO(this->get_logger(), "Mode changed to %s", modeToString(mode_).c_str());
+    }
+
+    void requestMobileEmergencyStop(bool emergency_enabled)
+    {
+        if (!mobile_emergency_stop_client_) {
+            return;
+        }
+
+        if (!mobile_emergency_stop_client_->wait_for_service(std::chrono::milliseconds(20))) {
+            RCLCPP_WARN(
+                this->get_logger(),
+                "Emergency stop service '%s' unavailable.",
+                mobile_emergency_stop_service_.c_str());
+            return;
+        }
+
+        auto req = std::make_shared<std_srvs::srv::SetBool::Request>();
+        req->data = emergency_enabled;
+        mobile_emergency_stop_client_->async_send_request(req);
     }
 
     static std::string modeToString(Mode mode)
