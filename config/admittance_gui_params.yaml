@@ -11,7 +11,8 @@ admittance_gui_node:
     # Mobile robot
     topics.mobile_cmd_twist: "/cmd_vel"
     topics.emergency_state: "/emergency_stop_state"
-    topics.battery_status: "/battery_status"
+    topics.emergency_stop_active: "/mobile_platform/emergency_stop_active"
+    topics.battery_status: "/battery_state"
 
     # Joy
     topics.joy_active_status: "/joy_mode_command/joy_active"
@@ -29,7 +30,7 @@ admittance_gui_node:
     services.joints_realtime_enable: "manipulator/joints_real_time_setter"
     services.mobile_emergency_stop: "/mobile_platform/emergency_stop"
     services.joy_enable: "/joy_mode_command_node/enable_joy"
-    services.gripper_control: "/ur_rtde_controller/robotiq_gripper_control"
+    services.gripper_control: "/ur_rtde/robotiq_gripper/command"
     zero_ft_topic: "/ur_rtde/zeroFTSensor"
 
     # Default values

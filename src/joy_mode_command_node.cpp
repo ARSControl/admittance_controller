@@ -31,6 +31,7 @@ public:
         mobile_twist_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(mobile_twist_topic_, 10);
         whole_body_twist_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(whole_body_twist_topic_, 10);
         joy_active_pub_ = this->create_publisher<std_msgs::msg::Bool>(joy_active_topic_, 10);
+        emergency_state_pub_ = this->create_publisher<std_msgs::msg::Bool>(emergency_state_topic_, 10);
         mobile_emergency_stop_client_ =
             this->create_client<std_srvs::srv::SetBool>(mobile_emergency_stop_service_);
         joy_enable_srv_ = this->create_service<std_srvs::srv::SetBool>(
@@ -70,6 +71,7 @@ private:
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr mobile_twist_pub_;
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr whole_body_twist_pub_;
     rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr joy_active_pub_;
+    rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr emergency_state_pub_;
     rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr mobile_emergency_stop_client_;
     rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr joy_enable_srv_;
     rclcpp::TimerBase::SharedPtr publish_timer_;
@@ -81,6 +83,7 @@ private:
     std::string mobile_twist_topic_;
     std::string whole_body_twist_topic_;
     std::string joy_active_topic_;
+    std::string emergency_state_topic_;
     std::string mobile_emergency_stop_service_;
     std::string joy_enable_service_;
 
@@ -160,6 +163,7 @@ private:
         mobile_twist_topic_ = this->declare_parameter<std::string>("topics.mobile_twist", "/neo/cmd_vel");
         whole_body_twist_topic_ = this->declare_parameter<std::string>("topics.whole_body_twist", "/mobile_manipulator/cmd_vel");
         joy_active_topic_ = this->declare_parameter<std::string>("topics.joy_active_status", "/joy_mode_command/joy_active");
+        emergency_state_topic_ = this->declare_parameter<std::string>("topics.emergency_stop_active", "/mobile_platform/emergency_stop_active");
         mobile_emergency_stop_service_ = this->declare_parameter<std::string>(
             "services.mobile_emergency_stop", "/mobile_platform/emergency_stop");
         joy_enable_service_ = this->declare_parameter<std::string>(
@@ -521,6 +525,11 @@ private:
         auto req = std::make_shared<std_srvs::srv::SetBool::Request>();
         req->data = emergency_enabled;
         mobile_emergency_stop_client_->async_send_request(req);
+        if (emergency_state_pub_) {
+            std_msgs::msg::Bool msg;
+            msg.data = emergency_enabled;
+            emergency_state_pub_->publish(msg);
+        }
     }
 
     void onJoyEnableService(

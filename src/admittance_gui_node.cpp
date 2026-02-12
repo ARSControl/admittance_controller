@@ -256,6 +256,7 @@ public:
     mobile_cmd_topic_ = this->declare_parameter<std::string>("topics.mobile_cmd_twist", "/cmd_vel");
     whole_body_cmd_topic_ = this->declare_parameter<std::string>("topics.whole_body_cmd_twist", "/mobile_manipulator/cmd_vel");
     emergency_topic_ = this->declare_parameter<std::string>("topics.emergency_state", "/emergency_stop_state");
+    emergency_stop_active_topic_ = this->declare_parameter<std::string>("topics.emergency_stop_active", "/mobile_platform/emergency_stop_active");
     battery_topic_ = this->declare_parameter<std::string>("topics.battery_status", "/battery_status");
     joy_active_topic_ = this->declare_parameter<std::string>("topics.joy_active_status", "/joy_mode_command/joy_active");
 
@@ -271,7 +272,7 @@ public:
     this->declare_parameter<int>("ui.gripper_speed", 100);
     this->declare_parameter<int>("ui.gripper_force", 100);
     gripper_service_name_ = this->declare_parameter<std::string>(
-      "services.gripper_control", "/ur_rtde_controller/robotiq_gripper_control");
+      "services.gripper_control", "/ur_rtde/robotiq_gripper/command");
 
     admittance_value_ = this->get_parameter("ui.admittance_value").as_double();
     force_reference_ = this->get_parameter("ui.force_reference").as_double();
@@ -314,6 +315,12 @@ public:
         emergency_button_stop_ = msg->emergency_button_stop;
         scanner_stop_ = msg->scanner_stop;
         has_emergency_state_ = true;
+      });
+
+    emergency_active_sub_ = create_subscription<std_msgs::msg::Bool>(
+      emergency_stop_active_topic_, 10, [this](std_msgs::msg::Bool::SharedPtr msg){
+        std::lock_guard<std::mutex> lock(mutex_);
+        mode_emergency_on_ = msg->data;
       });
 
     battery_sub_ = create_subscription<sensor_msgs::msg::BatteryState>(
@@ -518,6 +525,7 @@ private:
   std::string mobile_cmd_topic_;
   std::string whole_body_cmd_topic_;
   std::string emergency_topic_;
+  std::string emergency_stop_active_topic_;
   std::string battery_topic_;
   std::string joy_active_topic_;
 
@@ -537,6 +545,7 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr mobile_cmd_sub_;
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr whole_body_cmd_sub_;
   rclcpp::Subscription<neo_msgs2::msg::EmergencyStopState>::SharedPtr emergency_sub_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr emergency_active_sub_;
   rclcpp::Subscription<sensor_msgs::msg::BatteryState>::SharedPtr battery_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr joy_active_sub_;
 
@@ -868,8 +877,8 @@ private:
     req->speed = std::clamp(speed, 0, 100);
     req->force = std::clamp(force, 0, 100);
 
-    if (!gripper_client_->wait_for_service(std::chrono::milliseconds(120))) {
-      status_line_ = "Service unavailable: " + name;
+    if (!gripper_client_->wait_for_service(std::chrono::seconds(1))) {
+      status_line_ = "Service unavailable: " + gripper_service_name_;
       return;
     }
 

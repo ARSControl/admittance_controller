@@ -14,6 +14,7 @@ joy_mode_command_node:
     topics.mobile_twist: "/cmd_vel"
     topics.whole_body_twist: "/mobile_manipulator/cmd_vel"
     topics.joy_active_status: "/joy_mode_command/joy_active"
+    topics.emergency_stop_active: "/mobile_platform/emergency_stop_active"
     services.mobile_emergency_stop: "/mobile_platform/emergency_stop"
     services.joy_enable: "/joy_mode_command_node/enable_joy"
 
