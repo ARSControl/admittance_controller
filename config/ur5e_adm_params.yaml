@@ -19,6 +19,8 @@ admittance_control_node:
     b_d_block:          [40.0, 40.0, 40.0,  2.0,  2.0,  2.0]  # Diagonal damping coefficients (Ns/m) for the block
 
     loop_rate:          500.0                                 # Hz
+    enable_xd_reset:    false                                 # If true, periodically reset adm_xd to last tcp pose
+    frequency_xd_reset: 1.0                                   # Hz, used only when enable_xd_reset is true
 
     dz_force:           4.0                                   # force  dead zone
     dz_torque:          2.0                                   # torque dead zone

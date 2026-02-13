@@ -18,6 +18,8 @@
 #include <utility>
 #include <vector>
 
+#include <geometry_msgs/msg/pose.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <geometry_msgs/msg/vector3.hpp>
 #include <neo_msgs2/msg/emergency_stop_state.hpp>
@@ -259,6 +261,8 @@ public:
     emergency_stop_active_topic_ = this->declare_parameter<std::string>("topics.emergency_stop_active", "/mobile_platform/emergency_stop_active");
     battery_topic_ = this->declare_parameter<std::string>("topics.battery_status", "/battery_status");
     joy_active_topic_ = this->declare_parameter<std::string>("topics.joy_active_status", "/joy_mode_command/joy_active");
+    real_pose_topic_ = this->declare_parameter<std::string>("topics.real_pose_topic", "mobile_manipulator/tcp_pose");
+    cmd_pose_topic_ = this->declare_parameter<std::string>("topics.cmd_pose_topic", "mobile_manipulator/adm_xd");
 
     arm_ip_ = this->declare_parameter<std::string>("network.arm_ip", "192.168.2.10");
     mobile_ip_ = this->declare_parameter<std::string>("network.mobile_ip", "192.168.2.50");
@@ -339,6 +343,13 @@ public:
         mode_joy_on_ = msg->data;
       });
 
+    real_pose_sub_ = create_subscription<geometry_msgs::msg::PoseStamped>(
+      real_pose_topic_, 10, [this](geometry_msgs::msg::PoseStamped::SharedPtr msg) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        latest_real_pose_ = msg->pose;
+        has_real_pose_ = true;
+      });
+
     auto bool_srv = [this](const std::string &name) {
       return this->create_client<std_srvs::srv::SetBool>(name);
     };
@@ -364,6 +375,7 @@ public:
     m_adm_rot_pub_ = create_publisher<geometry_msgs::msg::Vector3>(manipulator_name_ + "/m_adm_rot", 10);
     b_adm_rot_pub_ = create_publisher<geometry_msgs::msg::Vector3>(manipulator_name_ + "/b_adm_rot", 10);
     k_adm_rot_pub_ = create_publisher<geometry_msgs::msg::Vector3>(manipulator_name_ + "/k_adm_rot", 10);
+    cmd_pose_pub_ = create_publisher<geometry_msgs::msg::Pose>(cmd_pose_topic_, 10);
 
     status_line_ = "Gui ready";
     last_ping_check_ = std::chrono::steady_clock::now() - std::chrono::milliseconds(std::max(100, ping_period_ms_));
@@ -528,6 +540,8 @@ private:
   std::string emergency_stop_active_topic_;
   std::string battery_topic_;
   std::string joy_active_topic_;
+  std::string real_pose_topic_;
+  std::string cmd_pose_topic_;
 
   std::string arm_ip_;
   std::string mobile_ip_;
@@ -538,6 +552,8 @@ private:
   sensor_msgs::msg::JointState last_arm_js_cmd_;
   geometry_msgs::msg::Twist last_mobile_cmd_;
   geometry_msgs::msg::Twist last_whole_body_cmd_;
+  geometry_msgs::msg::Pose latest_real_pose_;
+  bool has_real_pose_{false};
 
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr arm_cmd_sub_;
@@ -548,6 +564,7 @@ private:
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr emergency_active_sub_;
   rclcpp::Subscription<sensor_msgs::msg::BatteryState>::SharedPtr battery_sub_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr joy_active_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr real_pose_sub_;
 
   rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr admittance_client_;
   rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr push_client_;
@@ -568,6 +585,7 @@ private:
   rclcpp::Publisher<geometry_msgs::msg::Vector3>::SharedPtr m_adm_rot_pub_;
   rclcpp::Publisher<geometry_msgs::msg::Vector3>::SharedPtr b_adm_rot_pub_;
   rclcpp::Publisher<geometry_msgs::msg::Vector3>::SharedPtr k_adm_rot_pub_;
+  rclcpp::Publisher<geometry_msgs::msg::Pose>::SharedPtr cmd_pose_pub_;
 
   SDL_Window *window_{nullptr};
   SDL_Renderer *renderer_{nullptr};
@@ -609,6 +627,7 @@ private:
   bool mode_arm_jts_on_{false};
   bool mode_emergency_on_{true};
   bool mode_joy_on_{false};
+  bool mode_set_cmd_pose_{false};
 
   enum class FieldId {
     AdmittanceValue = 0,
@@ -675,19 +694,23 @@ private:
       if (callSetBool(mobile_emergency_stop_client_, false, "Emerg off")) { mode_emergency_on_ = false; }
     });
 
-    addBtn("Zero ft sensor", 820, 364, 270, 34, {100, 90, 40, 255}, [this]{
+    addBtn("Set cmd pose", 820, 364, 270, 34, {50, 100, 130, 255}, [this]{
+      publishCmdPoseFromReal();
+    });
+
+    addBtn("Zero ft sensor", 820, 406, 270, 34, {100, 90, 40, 255}, [this]{
       callTrigger(zero_ft_client_, "Zero ft sensor");
     });
 
-    addBtn("Grip open", 820, 486, 130, 34, {40,120,40,255}, [this]{
+    addBtn("Grip open", 820, 496, 130, 34, {40,120,40,255}, [this]{
       gripper_position_ = ur_rtde_controller::srv::RobotiQGripperControl::Request::GRIPPER_OPENED;
       callGripper(gripper_position_, gripper_speed_, gripper_force_, "Gripper open");
     });
-    addBtn("Grip close", 960, 486, 130, 34, {120,40,40,255}, [this]{
+    addBtn("Grip close", 960, 496, 130, 34, {120,40,40,255}, [this]{
       gripper_position_ = 0;
       callGripper(gripper_position_, gripper_speed_, gripper_force_, "Gripper close");
     });
-    addBtn("Grip send", 1100, 486, 220, 34, {50,100,130,255}, [this]{
+    addBtn("Grip send", 1100, 496, 220, 34, {50,100,130,255}, [this]{
       callGripper(gripper_position_, gripper_speed_, gripper_force_, "Gripper set");
     });
 
@@ -771,7 +794,7 @@ private:
       }
     );
     addField(
-      "Grip pos", 820, 528, 260, 34, std::to_string(gripper_position_),
+      "Grip pos", 820, 538, 260, 34, std::to_string(gripper_position_),
       [this](const std::string &s){
         int v;
         if (parseIntRange(s, 0, 100, v)) {
@@ -783,7 +806,7 @@ private:
       }
     );
     addField(
-      "Grip speed", 820, 570, 260, 34, std::to_string(gripper_speed_),
+      "Grip speed", 820, 580, 260, 34, std::to_string(gripper_speed_),
       [this](const std::string &s){
         int v;
         if (parseIntRange(s, 0, 100, v)) {
@@ -795,7 +818,7 @@ private:
       }
     );
     addField(
-      "Grip force", 820, 612, 260, 34, std::to_string(gripper_force_),
+      "Grip force", 820, 622, 260, 34, std::to_string(gripper_force_),
       [this](const std::string &s){
         int v;
         if (parseIntRange(s, 0, 100, v)) {
@@ -903,6 +926,29 @@ private:
     status_line_ = "Published: " + name + "=" + fmt(value, 2);
   }
 
+  void publishCmdPoseFromReal() {
+    if (!cmd_pose_pub_) {
+      mode_set_cmd_pose_ = false;
+      status_line_ = "Cmd pose publisher missing";
+      return;
+    }
+
+    geometry_msgs::msg::Pose pose;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (!has_real_pose_) {
+        mode_set_cmd_pose_ = false;
+        status_line_ = "No pose on " + real_pose_topic_;
+        return;
+      }
+      pose = latest_real_pose_;
+    }
+
+    cmd_pose_pub_->publish(pose);
+    mode_set_cmd_pose_ = true;
+    status_line_ = "Published cmd pose to " + cmd_pose_topic_;
+  }
+
   void drawPixelText(int x, int y, const std::string &raw, int scale, SDL_Color color) {
     const std::string text = raw;
     int cursor_x = x;
@@ -997,6 +1043,7 @@ private:
     bool mode_arm_jts_on = false;
     bool mode_emergency_on = true;
     bool mode_joy_on = false;
+    bool mode_set_cmd_pose = false;
 
     {
       std::lock_guard<std::mutex> lock(mutex_);
@@ -1022,6 +1069,7 @@ private:
       mode_arm_jts_on = mode_arm_jts_on_;
       mode_emergency_on = mode_emergency_on_;
       mode_joy_on = mode_joy_on_;
+      mode_set_cmd_pose = mode_set_cmd_pose_;
     }
 
     SDL_SetRenderDrawColor(renderer_, 18, 18, 22, 255);
@@ -1033,8 +1081,8 @@ private:
     const SDL_Rect panel_ping = scaleRect(SDL_Rect{20, 560, 760, 140});
     const SDL_Rect panel_mobile_state = scaleRect(SDL_Rect{20, 710, 760, 200});
 
-    const SDL_Rect panel_ctrl = scaleRect(SDL_Rect{800, 20, 740, 410});
-    const SDL_Rect panel_gripper = scaleRect(SDL_Rect{800, 440, 740, 240});
+    const SDL_Rect panel_ctrl = scaleRect(SDL_Rect{800, 20, 740, 430});
+    const SDL_Rect panel_gripper = scaleRect(SDL_Rect{800, 460, 740, 220});
     const SDL_Rect panel_params = scaleRect(SDL_Rect{800, 690, 740, 220});
 
     drawPanel(panel_joint, "JOINT STATES");
@@ -1072,6 +1120,7 @@ private:
     drawModeIndicator(1148, 238, "Arm jts", mode_arm_jts_on);
     drawModeIndicator(1148, 280, "Joy input", mode_joy_on);
     drawModeIndicator(1148, 322, "Emergency", mode_emergency_on);
+    drawModeIndicator(1148, 364, "Set cmd pose", mode_set_cmd_pose);
 
     for (const auto &b : buttons_) {
       SDL_SetRenderDrawColor(renderer_, b.color.r, b.color.g, b.color.b, b.color.a);

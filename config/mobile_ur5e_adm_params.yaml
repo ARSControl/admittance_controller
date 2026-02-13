@@ -8,8 +8,8 @@ admittance_control_node:
 
     m_d:                [10.0, 10.0, 10.0,  2.0,  2.0,  2.0]  # Diagonal mass    coefficients (kg)
 
-    # k_d:                [40.0, 40.0, 40.0,  2.0,  2.0,  2.0]  # Diagonal spring  coefficients (N/m)
-    k_d:                [ 0.0,  0.0,  0.0,  0.0,  0.0,  0.0]  # Diagonal spring  coefficients (N/m)
+    k_d:                [40.0, 40.0, 40.0,  2.0,  2.0,  2.0]  # Diagonal spring  coefficients (N/m)
+    # k_d:                [ 0.0,  0.0,  0.0,  0.0,  0.0,  0.0]  # Diagonal spring  coefficients (N/m)
 
     b_d:                [25.0, 25.0, 25.0,  2.0,  2.0,  2.0]  # Diagonal damping coefficients (Ns/m)
 
@@ -23,6 +23,9 @@ admittance_control_node:
     b_d_block:          [25.0, 25.0, 25.0,  2.0,  2.0,  2.0]  # Diagonal damping coefficients (Ns/m) for the block
 
     loop_rate:          500.0                                 # Hz
+
+    enable_xd_reset:    false                                 # If true, periodically reset adm_xd to last tcp pose
+    frequency_xd_reset: 1.0                                   # Hz, used only when enable_xd_reset is true
 
     dz_force:           4.0                                   # force  dead zone
     dz_torque:          2.0                                   # torque dead zone
@@ -48,7 +51,7 @@ admittance_control_node:
    
     kp_push:            0.001                                 # Proportional gain for goal force regulation in the pushing task
 
-    push_force_goal:    6.0                                   # Force goal to be regulated in the pushing task
+    push_force_goal:    10.0                                  # Force goal to be regulated in the pushing task
 
     # safe_push_dist:     0.50                                  # Safety distance for the force regulation in the pushing task
     safe_push_dist:     5.0                                   # Safety distance for the force regulation in the pushing task

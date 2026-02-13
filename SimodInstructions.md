@@ -22,7 +22,7 @@ If something doesn't work, try to launch directly the main neobotics code with:
 
 ## Launch joystick app (A-arm only, X-neobotics only, y-all, b-break)
 
-    ros2 launch admittance_controller joy_mode_command.launch.py 
+    ros2 launch admittance_controller joy_mode_command.launch.py
 
 # Start communication with ur5e robot
 

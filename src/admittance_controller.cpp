@@ -70,8 +70,14 @@ Eigen::VectorXd AdmittanceController::pushRegulation(const Eigen::VectorXd &wren
     double push_force_goal_local = push_force_goal_;
 
     // Iterate over the pushing direction
-    for(unsigned int k = 0; k < 1; k++)
+    for(unsigned int k = 0; k < 3; k++)
     {
+        // Over y and z directions, the local reference force is 0
+        if (k == 1 || k == 2)
+        {
+            push_force_goal_local = 0;
+        }
+
         // If the wrench is negative, the cumulative step is positive, meaning the robot is being pushed
         if (wrench(k) < 0)
         {

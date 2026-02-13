@@ -7,6 +7,8 @@ admittance_gui_node:
     topics.arm_cmd_twist: "/manipulator/cmd_vel"
     topics.arm_cmd_joint: "/manipulator/js_cmd_vel"
     topics.whole_body_cmd_twist: "/mobile_manipulator/cmd_vel"
+    topics.real_pose_topic: "mobile_manipulator/tcp_pose"
+    topics.cmd_pose_topic: "mobile_manipulator/adm_xd"
 
     # Mobile robot
     topics.mobile_cmd_twist: "/cmd_vel"

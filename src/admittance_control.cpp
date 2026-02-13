@@ -37,6 +37,7 @@ AdmittanceControl::AdmittanceControl(): Node("admittance_control_node")
     // Declare and get reference pose topic
     auto cb_group_ref_pose = this->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
     sub_options.callback_group = cb_group_ref_pose;
+    const std::string xd_topic = manipulator_name_ + "/adm_xd";
     xd_sub_ = this->create_subscription<geometry_msgs::msg::Pose>(manipulator_name_+"/adm_xd", 1,
                  std::bind(&AdmittanceControl::admittanceXdCallback, this, std::placeholders::_1), sub_options);
 
@@ -68,6 +69,16 @@ AdmittanceControl::AdmittanceControl(): Node("admittance_control_node")
 
     // Publish filtered force-torque sensor topic
     wf_pub_ = this->create_publisher<geometry_msgs::msg::Wrench>(manipulator_name_+"/filtered_wrench", 1);
+    xd_pub_ = this->create_publisher<geometry_msgs::msg::Pose>(xd_topic, 1);
+
+    if (enable_xd_reset_)
+    {
+        xd_reset_timer_ = this->create_wall_timer(
+            std::chrono::duration<double>(1.0 / frequency_xd_reset_),
+            std::bind(&AdmittanceControl::resetXdToCurrentPose, this),
+            cb_group_tcp_pose);
+        RCLCPP_INFO(this->get_logger(), "Xd reset enabled at %.3f Hz", frequency_xd_reset_);
+    }
     
     // --------- SERVICES ----------------
     // Publish service to enable admittance control
@@ -159,8 +170,17 @@ void AdmittanceControl::check_params()
     // Declare and get frequency
     this->declare_parameter("force_cut_freq", 100.0);
     this->declare_parameter("loop_rate", 500.0);
+    this->declare_parameter("enable_xd_reset", false);
+    this->declare_parameter("frequency_xd_reset", 1.0);
     double acc_filter_freq = this->get_parameter("force_cut_freq").as_double();
     loop_rate_             = this->get_parameter("loop_rate").as_double();
+    enable_xd_reset_       = this->get_parameter("enable_xd_reset").as_bool();
+    frequency_xd_reset_    = this->get_parameter("frequency_xd_reset").as_double();
+    if (frequency_xd_reset_ <= 0.0)
+    {
+        RCLCPP_WARN(this->get_logger(), "Invalid frequency_xd_reset <= 0.0, forcing to 1.0 Hz");
+        frequency_xd_reset_ = 1.0;
+    }
 
     // Create AdmittanceController object
     adm_controller_ = new AdmittanceController(
@@ -292,6 +312,9 @@ Eigen::Vector3d AdmittanceControl::euler_from_quaternion(const Eigen::Quaternion
 void AdmittanceControl::tcpPoseCallback(const std::shared_ptr<geometry_msgs::msg::PoseStamped> msg)
 {
     // Update end-effector pose
+    last_tcp_pose_ = msg->pose;
+    has_tcp_pose_ = true;
+
     ee_pose_(0) = msg->pose.position.x;
     ee_pose_(1) = msg->pose.position.y;
     ee_pose_(2) = msg->pose.position.z;
@@ -303,6 +326,15 @@ void AdmittanceControl::tcpPoseCallback(const std::shared_ptr<geometry_msgs::msg
     ee_pose_(4) = msg->pose.orientation.y;
     ee_pose_(5) = msg->pose.orientation.z;
     ee_pose_(6) = msg->pose.orientation.w;
+}
+
+void AdmittanceControl::resetXdToCurrentPose()
+{
+    if (!enable_xd_reset_ || !has_tcp_pose_)
+    {
+        return;
+    }
+    xd_pub_->publish(last_tcp_pose_);
 }
 
 // Robot twist callback

@@ -71,6 +71,8 @@ private:
 	int n_joints_;
 	double push_force_goal_;
     double max_cmd_acc_;
+    bool enable_xd_reset_{false};
+    double frequency_xd_reset_{1.0};
 
     bool vel_mode_ = false; // true -> velocity mode, false -> position mode (default behaviour)
 
@@ -108,8 +110,9 @@ private:
     rclcpp::Service<admittance_controller::srv::SetFloat64>::SharedPtr max_cmd_acc_service_;
     rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr ft_client_;
 	// Publishers
-	rclcpp::Publisher<geometry_msgs::msg::Wrench>::SharedPtr wf_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::Wrench>::SharedPtr wf_pub_;
 	rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cartesian_vel_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::Pose>::SharedPtr xd_pub_;
 	// Subscribers
 	rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr 	 	ee_pose_sub_;
 	rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr 	 	xd_sub_;
@@ -127,6 +130,12 @@ private:
     // Executor and Timer
     rclcpp::executors::MultiThreadedExecutor executor_;
     rclcpp::TimerBase::SharedPtr timer_;
+    rclcpp::TimerBase::SharedPtr xd_reset_timer_;
+
+    geometry_msgs::msg::Pose last_tcp_pose_;
+    bool has_tcp_pose_{false};
+
+    void resetXdToCurrentPose();
 };
 
 #endif  // ADMITTANCE_CONTROL_HPP_
