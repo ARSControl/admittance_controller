@@ -3,7 +3,7 @@
 
 #include <eigen3/Eigen/Eigen>
 #include <vector>
-#include "filters/RCFilter.hpp"
+#include "filters_c/RCFilter.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 #include "manipulator_kdl/manipulator_kdl.hpp"
 

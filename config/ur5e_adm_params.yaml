@@ -19,12 +19,9 @@ admittance_control_node:
     kp_pos:               0.0                                   # kp for position compensation
     kp_rot:               0.0                                   # kp for rotation compensation
 
-    mode:                 "moveit"                              # Planner of the moves, default "kdl" or "moveit"
-
     # Subscribers
     joint_state_topic:    "/joint_states"                       # joint state topic, default "/joint_states" 
     force_feed_topic:     "/ur_rtde/ft_sensor"                  # force sensor reading topic, default "/ur_rtde/ft_sensor"
-    new_adm_params_topic: "/current_inertia_damping"            # new admittance parameters topic, default "/current_inertia_damping"
 
     # Publishers
     command_topic:        "/ur_rtde/controllers/joint_velocity_controller/command"  # vel command to the manipulator's joints, default
@@ -37,11 +34,3 @@ admittance_control_node:
                                                                 # "/ur_rtde/zeroFTSensor"
    
     joint_names:          ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]
-
-    kp_push:              0.001                                 # Proportional gain for goal force regulation in the pushing task
-
-    push_force_goal:      8.0                                   # Force goal to be regulated in the pushing task
-
-    safe_push_dist:       0.15                                  # Safety distance for the force regulation in the pushing task
-
-    data_logger:          false

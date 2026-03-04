@@ -43,9 +43,7 @@ int main(int argc, char **argv)
 		node->spinner();
 		rate.sleep();
 	}
-	
-    node->writeToCSV();
-    
+	    
     // Shutdown ROS2
     rclcpp::shutdown();
 

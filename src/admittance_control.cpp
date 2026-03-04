@@ -14,11 +14,7 @@ AdmittanceControl::AdmittanceControl(const std::string& node_name) : rclcpp::Nod
         joints_state_topic_, 1, std::bind(&AdmittanceControl::jointCallback, this, std::placeholders::_1));
     force_sub_ = this->create_subscription<geometry_msgs::msg::Wrench>(
         force_feed_topic_, 1, std::bind(&AdmittanceControl::forceSensorCallback, this, std::placeholders::_1));
-
-    // Variable admittance control
-    var_adm_sub_ = this->create_subscription<energy_tank::msg::InertiaDamping>(
-        new_adm_params_topic_, 1, std::bind(&AdmittanceControl::inertiaDampingCallback, this, std::placeholders::_1));
-    
+   
     // --------- PUBLISHERS -------------
     // Publish joint velocity command topic
     joint_vel_pub_ = this->create_publisher<std_msgs::msg::Float64MultiArray>(command_topic_, 1);
@@ -40,7 +36,6 @@ AdmittanceControl::AdmittanceControl(const std::string& node_name) : rclcpp::Nod
 }
 
 AdmittanceControl::~AdmittanceControl(){
-    writeToCSV();
 }
 
 // Node params update
@@ -151,14 +146,6 @@ void AdmittanceControl::check_params()
     }
     force_feed_topic_ = this->get_parameter("force_feed_topic").as_string();
 
-    // Init new admittance parameters topic
-    this->declare_parameter("new_adm_params_topic", rclcpp::PARAMETER_STRING);
-    if (!this->has_parameter("new_adm_params_topic")) {
-        RCLCPP_WARN(this->get_logger(), "New adm params topic param not set, using default: /current_inertia_damping");
-        this->declare_parameter<std::string>("new_adm_params_topic", "/current_inertia_damping");
-    }
-    new_adm_params_topic_ = this->get_parameter("new_adm_params_topic").as_string();
-
     // Init command topic
     this->declare_parameter("command_topic", rclcpp::PARAMETER_STRING);
     if (!this->has_parameter("command_topic")) {
@@ -192,15 +179,6 @@ void AdmittanceControl::check_params()
     zero_ft_sensor_topic_ = this->get_parameter("zero_ft_topic").as_string();
 
 
-    // Data logger boolean value
-    this->declare_parameter("data_logger", rclcpp::PARAMETER_BOOL);
-    if (!this->has_parameter("data_logger")) {
-        RCLCPP_WARN(this->get_logger(), "Data logger activation param not set, using default: false.");
-        this->declare_parameter<bool>("data_logger", false);
-    }
-    data_logger_enabled_ = this->get_parameter("data_logger").as_bool();
-
-
     // // Initialize low-pass filter for the wrench
     // this->declare_parameter("force_cut_freq", rclcpp::PARAMETER_DOUBLE);
     // if (!this->has_parameter("force_cut_freq")) {
@@ -208,26 +186,6 @@ void AdmittanceControl::check_params()
     //     this->declare_parameter<double>("force_cut_freq", 100.0);
     // }
     // this->force_cut_freq_ = this->get_parameter("force_cut_freq").as_double();
-
-    // // Init pushing interaction params
-    // this->declare_parameter("kp_push", rclcpp::PARAMETER_DOUBLE);
-    // this->declare_parameter("push_force_goal", rclcpp::PARAMETER_DOUBLE);
-    // this->declare_parameter("safe_push_dist", rclcpp::PARAMETER_DOUBLE);
-    // if (!this->has_parameter("kp_push")) {
-    //     RCLCPP_WARN(this->get_logger(), "Proportional gain for pushing task not set, using default: 0.01.");
-    //     this->declare_parameter<double>("kp_push", 0.1);
-    // }
-    // if (!this->has_parameter("push_force_goal")) {
-    //     RCLCPP_WARN(this->get_logger(), "Goal force for pushing task not set, using default: 3.0.");
-    //     this->declare_parameter<double>("push_force_goal", 3.0);
-    // }
-    // if (!this->has_parameter("safe_push_dist")) {
-    //     RCLCPP_WARN(this->get_logger(), "Safety distance for pushing task not set, using default: 0.25.");
-    //     this->declare_parameter<double>("safe_push_dist", 0.25);
-    // }
-    // double kp_push         = this->get_parameter("kp_push").as_double();
-    // double push_force_goal = this->get_parameter("push_force_goal").as_double();
-    // double safe_push_dist  = this->get_parameter("safe_push_dist").as_double();
 
     // Fill matrices values
     Eigen::Matrix<double, 6, 6> M_des = Eigen::Matrix<double, 6, 6>::Zero();
@@ -266,21 +224,6 @@ void AdmittanceControl::forceSensorCallback(const std::shared_ptr<geometry_msgs:
     wrench_(5, 0) = w->torque.z;
     // std::cout << "-----------3" << std::endl;
 
-}
-
-// Callback function for changin Inertia and Damping matrice
-void AdmittanceControl::inertiaDampingCallback(const std::shared_ptr<energy_tank::msg::InertiaDamping> new_params)
-{
-    // Extract new params
-    Vector6d new_inertia = Vector6d( new_params->inertia[0] , new_params->inertia[1] , new_params->inertia[2] ,
-                                     new_params->inertia[3] , new_params->inertia[4] , new_params->inertia[5] );
-    Vector6d new_damping = Vector6d( new_params->damping[0] , new_params->damping[1] , new_params->damping[2] ,
-                                     new_params->damping[3] , new_params->damping[4] , new_params->damping[5] );
-
-    Matrix6d new_Mdes = new_inertia.asDiagonal();
-    Matrix6d new_Ddes = new_damping.asDiagonal();
-
-    adm_controller_->changeParameters( new_Mdes , new_Ddes );
 }
 
 // Service callback to enable or disable admittance control
@@ -343,62 +286,7 @@ void AdmittanceControl::spinner()
     cartesian_vel.angular.y = dx(4);
     cartesian_vel.angular.z = dx(5);
 
-    if(data_logger_enabled_){
-        auto now = this->get_clock()->now();
-
-        data_.emplace_back( 
-            (now.nanoseconds() - start_time_.nanoseconds()) / 1e6,
-            dq(0,0),
-            dq(1,0),
-            dq(2,0),
-            dq(3,0),
-            dq(4,0),
-            dq(5,0),
-            joint_pos_[0],
-            joint_pos_[1],
-            joint_pos_[2],
-            joint_pos_[3],
-            joint_pos_[4],
-            joint_pos_[5]
-        );
-    }
-
     // Publish velocities
     joint_vel_pub_->publish(joint_vel);
     cartesian_vel_pub_->publish(cartesian_vel);
-}
-
-void AdmittanceControl::writeToCSV(){
-
-    if(!data_logger_enabled_){return;};
-
-    // Specify the full path to the CSV file
-    std::string file_path = "logged_data_adm.csv";
-    std::ofstream file;
-    file.open(file_path);
-
-    // Write headers
-    file << "timestamp,joint_vel_0,joint_vel_1,joint_vel_2,joint_vel_3,joint_vel_4,joint_vel_5,joint_pos_0,joint_pos_1,joint_pos_2,joint_pos_3,joint_pos_4,joint_pos_5\n";
-
-    // Write the data
-    for (const auto& entry : data_)
-    {
-        file << std::get<0>(entry) << ","; // Timestamp
-
-        // Write each data field, using value_or to provide a default empty value if the optional is not set
-        file << std::get<1>(entry).value_or(0.0) << ","; // 
-        file << std::get<2>(entry).value_or(0.0) << ","; // 
-        file << std::get<3>(entry).value_or(0.0) << ","; // 
-        file << std::get<4>(entry).value_or(0.0) << ","; // 
-        file << std::get<5>(entry).value_or(0.0) << ","; // 
-        file << std::get<6>(entry).value_or(0.0) << ","; // 
-        file << std::get<7>(entry).value_or(0.0) << ","; // 
-        file << std::get<8>(entry).value_or(0.0) << ","; // 
-        file << std::get<9>(entry).value_or(0.0) << ","; // 
-        file << std::get<10>(entry).value_or(0.0) << ","; //
-        file << std::get<11>(entry).value_or(0.0) << ","; //
-        file << std::get<12>(entry).value_or(0.0) << "\n"; //
-    }
-
-    file.close();
 }
