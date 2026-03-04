@@ -26,7 +26,7 @@ If something doesn't work, try to launch directly the main neobotics code with:
 
 # Start communication with ur5e robot
 
-    ros2 launch ur_rtde_controller rtde_controller.launch.py ROBOT_IP:=192.168.2.30 enable_gripper:=true
+    ros2 launch ur_rtde_controller rtde_controller.launch.py ROBOT_IP:=192.168.2.30 enable_gripper:=true --ros-args -r /joint_state:=/fake/joint_state
 
 # Start ur5e planner and controller
 
