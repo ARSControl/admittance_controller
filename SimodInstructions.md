@@ -36,7 +36,8 @@ Launch the following cmd to enable the planner:
 
 Or you can directly use the following if you want to include gripper collision box and mobile robot platform collision boxes:
 
-    ros2 launch manipulators custom_robot.launch.py ur_type:=ur5e robot:=ur5e_mobile publish_joint_states:=False xacro_args:='camera:=false gripper:=false gfloor:=true gripper_collision_box:=true tcp_offset:=0.148'
+    ros2 launch manipulators custom_robot.launch.py ur_type:=ur5e robot:=ur5e_mobile publish_joint_states:=False gripper:=no_gripper parent_link:=world_ur
+    xacro_args:='camera:=false gripper:=false gfloor:=true gripper_collision_box:=true tcp_offset:=0.148'
 
 Launch the interaction menu (if you need further planning tools):
 
