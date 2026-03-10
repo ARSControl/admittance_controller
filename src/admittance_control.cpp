@@ -18,9 +18,6 @@ AdmittanceControl::AdmittanceControl(const std::string& node_name) : rclcpp::Nod
     // --------- PUBLISHERS -------------
     // Publish joint velocity command topic
     joint_vel_pub_ = this->create_publisher<std_msgs::msg::Float64MultiArray>(command_topic_, 1);
-
-    // Publish EE velocity topic
-    cartesian_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(cart_vel_topic_, 1);
     
     // --------- SERVICES ----------------
     // Publish service to enable admittance control
@@ -70,49 +67,43 @@ void AdmittanceControl::check_params()
     std::vector<double> k_d = this->get_parameter("k_d").as_double_array();
     std::vector<double> b_d = this->get_parameter("b_d").as_double_array();
 
-    // // Admittance params
-    // this->declare_parameter("dz_force", rclcpp::PARAMETER_DOUBLE);
-    // this->declare_parameter("dz_torque", rclcpp::PARAMETER_DOUBLE);
-    // this->declare_parameter("kp_pos", rclcpp::PARAMETER_DOUBLE);
-    // this->declare_parameter("kp_rot", rclcpp::PARAMETER_DOUBLE);
-    // if (!this->has_parameter("dz_force")) {
-    //     RCLCPP_WARN(this->get_logger(), "Force dead zone not set, using default: 5 N.");
-    //     this->declare_parameter<double>("dz_force", 5.0);
-    // }
-    // if (!this->has_parameter("dz_torque")) {
-    //     RCLCPP_WARN(this->get_logger(), "Torque dead zone not set, using default: 1 N.");
-    //     this->declare_parameter<double>("dz_torque", 1.0);
-    // }
-    // if (!this->has_parameter("kp_pos")) {
-    //     RCLCPP_WARN(this->get_logger(), "Proportional gain for position compensation not set, using default: 1.0.");
-    //     this->declare_parameter<double>("kp_pos", 1.0);
-    // }
-    // if (!this->has_parameter("kp_rot")) {
-    //     RCLCPP_WARN(this->get_logger(), "Proportional gain for rotation compensation not set, using default: 1.0.");
-    //     this->declare_parameter<double>("kp_rot", 1.0);
-    // }
-    // dz_force_  = this->get_parameter("dz_force").as_double();
-    // dz_torque_ = this->get_parameter("dz_torque").as_double();
-    // kp_pos_    = this->get_parameter("kp_pos").as_double();
-    // kp_rot_    = this->get_parameter("kp_rot").as_double();
+    // Admittance params
+    this->declare_parameter("dz_force", rclcpp::PARAMETER_DOUBLE);
+    this->declare_parameter("dz_torque", rclcpp::PARAMETER_DOUBLE);
+    this->declare_parameter("kp_pos", rclcpp::PARAMETER_DOUBLE);
+    this->declare_parameter("kp_rot", rclcpp::PARAMETER_DOUBLE);
+    if (!this->has_parameter("dz_force")) {
+        RCLCPP_WARN(this->get_logger(), "Force dead zone not set, using default: 5 N.");
+        this->declare_parameter<double>("dz_force", 5.0);
+    }
+    if (!this->has_parameter("dz_torque")) {
+        RCLCPP_WARN(this->get_logger(), "Torque dead zone not set, using default: 1 N.");
+        this->declare_parameter<double>("dz_torque", 1.0);
+    }
+    if (!this->has_parameter("kp_pos")) {
+        RCLCPP_WARN(this->get_logger(), "Proportional gain for position compensation not set, using default: 1.0.");
+        this->declare_parameter<double>("kp_pos", 1.0);
+    }
+    if (!this->has_parameter("kp_rot")) {
+        RCLCPP_WARN(this->get_logger(), "Proportional gain for rotation compensation not set, using default: 1.0.");
+        this->declare_parameter<double>("kp_rot", 1.0);
+    }
+    double dz_force  = this->get_parameter("dz_force").as_double();
+    double dz_torque = this->get_parameter("dz_torque").as_double();
+    double kp_pos    = this->get_parameter("kp_pos").as_double();
+    double kp_rot    = this->get_parameter("kp_rot").as_double();
 
-    // // Init interaction params
-    // this->declare_parameter("force_limit", rclcpp::PARAMETER_DOUBLE_ARRAY);
-    // if (!this->has_parameter("force_limit")) {
-    //     RCLCPP_WARN(this->get_logger(), "Force limit not set, using default values.");
-    //     this->declare_parameter<std::vector<double>>("force_limit", {1.0, 1.0, 1.0, 0.5, 0.5, 0.5});
-    // }
-    // std::vector<double> force_limit_vec = this->get_parameter("force_limit").as_double_array();
-    // for (unsigned int k = 0; k < 6; k++) {
-    //     force_limit_(k) = force_limit_vec[k];
-    // }
-    // this->declare_parameter("mode", rclcpp::PARAMETER_STRING);
-    // if (!this->has_parameter("mode")) {
-    //     RCLCPP_WARN(this->get_logger(), "Mode param not set, using default: kdl.");
-    //     this->declare_parameter<std::string>("mode", "kdl");
-    // }
-    // mode_ = this->get_parameter("mode").as_string();
-    // mode_bool_ = (mode_ != "kdl");
+    adm_controller_->setDeadZone(dz_force, dz_torque);
+    Eigen::Matrix<double, 6, 6> internal_Kp = Eigen::Matrix<double, 6, 6>::Zero();
+    internal_Kp(0,0) = kp_pos;
+    internal_Kp(1,1) = kp_pos;
+    internal_Kp(2,2) = kp_pos;
+    internal_Kp(3,3) = kp_rot;
+    internal_Kp(4,4) = kp_rot;
+    internal_Kp(5,5) = kp_rot;
+
+    adm_controller_->changeInternalP(internal_Kp);
+    
 
     // Init control params
     this->declare_parameter("loop_rate", rclcpp::PARAMETER_DOUBLE);
@@ -153,14 +144,6 @@ void AdmittanceControl::check_params()
         this->declare_parameter<std::string>("command_topic", "/ur_rtde/controllers/joint_velocity_controller/command");
     }
     command_topic_ = this->get_parameter("command_topic").as_string();
-
-    // Init cartesian velocity topic
-    this->declare_parameter("cart_vel_topic", rclcpp::PARAMETER_STRING);
-    if (!this->has_parameter("cart_vel_topic")) {
-        RCLCPP_WARN(this->get_logger(), "Cartesian velocity topic param not set, using default: /cartesian_velocity.");
-        this->declare_parameter<std::string>("cart_vel_topic", "/cartesian_velocity");
-    }
-    cart_vel_topic_ = this->get_parameter("cart_vel_topic").as_string();
 
     // Init enable admittance service call
     this->declare_parameter("enable_adm_service", rclcpp::PARAMETER_STRING);
@@ -273,20 +256,10 @@ void AdmittanceControl::spinner()
     rclcpp::spin_some(this->get_node_base_interface());
     auto dq = adm_controller_->computeSpeed(wrench_);
 
-    auto dx = adm_controller_->returnTwist();
     std_msgs::msg::Float64MultiArray joint_vel;
-    geometry_msgs::msg::Twist cartesian_vel;
     for (uint i = 0; i < dq.rows(); i++)
         joint_vel.data.push_back(dq(i, 0));
 
-    cartesian_vel.linear.x  = dx(0);
-    cartesian_vel.linear.y  = dx(1);
-    cartesian_vel.linear.z  = dx(2);
-    cartesian_vel.angular.x = dx(3);
-    cartesian_vel.angular.y = dx(4);
-    cartesian_vel.angular.z = dx(5);
-
     // Publish velocities
     joint_vel_pub_->publish(joint_vel);
-    cartesian_vel_pub_->publish(cartesian_vel);
 }

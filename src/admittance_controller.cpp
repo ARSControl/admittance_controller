@@ -45,7 +45,7 @@ AdmittanceController::AdmittanceController(Eigen::Matrix<double, 6, 6> Mdes, Eig
         jacobian_[i].resize(n_joints_);
 
     // Initialize low-pass filter for acceleration
-    ddx_filter_ = new filters::RCFilter(6, 30.0, ts_);
+    ddx_filter_ = new filters::RCFilter(6, 300.0, ts_);
 
     // Initialize admittance control parameters
     admittance_active_ = false;
@@ -225,8 +225,6 @@ Eigen::MatrixXd AdmittanceController::computeSpeed(Eigen::Matrix<double, 6, 1> &
     wrench_ = wrench;
     computeDeadSignal(wrench_, dead_zone_force_, dead_zone_torque_);
 
-    // std::cout << wrench_ << std::endl << std::endl;
-
     p_des_.position.x = xdes(0, 0);
     p_des_.position.y = xdes(1, 0);
     p_des_.position.z = xdes(2, 0);
@@ -238,8 +236,12 @@ Eigen::MatrixXd AdmittanceController::computeSpeed(Eigen::Matrix<double, 6, 1> &
 
     computeError(p_real_, p_des_, err_);
 
-    ddx_ = ddx_des + M_des_.inverse() * (wrench_ + B_des_ * (dx_des - dx_) + K_des_ * err_);
+    // Generalization to constrained admittance. The system can be seen as Mdes*ddx = Fcontrol + Fconstraint
+    // If Fconstraint is null, we obtain the classical admittance.
+    Fcontrol_ = M_des_ * ddx_des + (wrench_ + B_des_ * (dx_des - dx_) + K_des_ * err_);
+    Fconstr_ = computeFconstr(Fcontrol_, p_real_);
 
+    ddx_ = M_des_.ldlt().solve(Fcontrol_ + Fconstr_);
     ddx_ = ddx_filter_->filter(ddx_);
     dx_ = dx_ + ddx_ * ts_;
 
@@ -292,4 +294,6 @@ Eigen::MatrixXd AdmittanceController::computeAcceleration()
     // I do not know if it make sense to compute ddq in another function
     // Maybe if we want to implement admittance control on a torque controlled robot?
     // For know this function is empty and it is private
+
+    return Eigen::MatrixXd::Zero(6,1);
 }

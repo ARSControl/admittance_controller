@@ -33,7 +33,6 @@ private:
 	rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_sub_;
 	rclcpp::Subscription<geometry_msgs::msg::Wrench>::SharedPtr force_sub_;
 	rclcpp::Publisher<std_msgs::msg::Float64MultiArray>::SharedPtr joint_vel_pub_;
-	rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cartesian_vel_pub_;
 
 	rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr adm_service_;
     rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr ft_client_;
@@ -47,7 +46,6 @@ private:
     std::string joints_state_topic_,        // Joint States topic
                 force_feed_topic_,          // Force-feed topic
                 command_topic_,             // Joint Velocity command topic
-                cart_vel_topic_,            // Cartesian Velocity topic
                 enable_adm_service_,        // Enable admittance service call
                 zero_ft_sensor_topic_;      // ZeroFT client topic
 };

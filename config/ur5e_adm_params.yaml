@@ -26,8 +26,6 @@ admittance_control_node:
     # Publishers
     command_topic:        "/ur_rtde/controllers/joint_velocity_controller/command"  # vel command to the manipulator's joints, default
                                                                                     # "/ur_rtde/controllers/cartesian_velocity_controller/command" or "manipulator/cmd_vel" 
-    cart_vel_topic:       "/cartesian_velocity"                 # cartesian velocity command topic, default "/cartesian_velocity"
-
     # Services
     enable_adm_service:   "/enable_admittance"                  # service call for enabling admittance, default "/enable_admittance"
     zero_ft_topic:        "/ur_rtde/zeroFTSensor"               # server to reset the force/torque sensor, default
