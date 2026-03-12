@@ -239,7 +239,7 @@ Eigen::MatrixXd AdmittanceController::computeSpeed(Eigen::Matrix<double, 6, 1> &
     // Generalization to constrained admittance. The system can be seen as Mdes*ddx = Fcontrol + Fconstraint
     // If Fconstraint is null, we obtain the classical admittance.
     Fcontrol_ = M_des_ * ddx_des + (wrench_ + B_des_ * (dx_des - dx_) + K_des_ * err_);
-    Fconstr_ = computeFconstr(Fcontrol_, p_real_);
+    Fconstr_ = computeFconstr(Fcontrol_);
 
     ddx_ = M_des_.ldlt().solve(Fcontrol_ + Fconstr_);
     ddx_ = ddx_filter_->filter(ddx_);

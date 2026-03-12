@@ -22,7 +22,7 @@ public:
 	void setDeadZone(double &dead_zone_force, double &dead_zone_torque);
 	void setFilterParams(double &cutoff);
 
-	std::function<Eigen::Matrix<double, 6, 1>(Eigen::Matrix<double, 6, 1>, geometry_msgs::msg::Pose)> computeFconstr = [](const Eigen::Matrix<double, 6, 1>&Fc, const geometry_msgs::msg::Pose &preal) {
+	std::function<Eigen::Matrix<double, 6, 1>(Eigen::Matrix<double, 6, 1>)> computeFconstr = [](const Eigen::Matrix<double, 6, 1>&Fc) {
 		return Eigen::Matrix<double, 6, 1>::Zero();
     };
 
