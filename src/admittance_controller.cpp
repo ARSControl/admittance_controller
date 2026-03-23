@@ -1,5 +1,6 @@
 #include "admittance_controller/admittance_controller.h"
 #include <algorithm>
+#include <rclcpp/rclcpp.hpp>
 
 // Constructor for the AdmittanceController class
 AdmittanceController::AdmittanceController( const std::vector<double>& m_des,
