@@ -16,8 +16,9 @@ admittance_control_node:
     # m_d_block:          [15.0, 15.0, 15.0,  2.0,  2.0,  2.0]  # Diagonal mass    coefficients (kg)   for the block
     m_d_block:          [10.0, 10.0, 10.0,  2.0,  2.0,  2.0]  # Diagonal mass    coefficients (kg)   for the block
 
+    k_d_block:          [40.0, 40.0, 40.0,  2.0,  2.0,  2.0]  # Diagonal spring  coefficients (N/m)  for the block
     # k_d_block:          [20.0, 20.0, 20.0,  2.0,  2.0,  2.0]  # Diagonal spring  coefficients (N/m)  for the block
-    k_d_block:          [ 0.0,  0.0,  0.0,   0.0,  0.0,  0.0]  # Diagonal spring  coefficients (N/m)  for the block
+    # k_d_block:          [ 0.0,  0.0,  0.0,   0.0,  0.0,  0.0]  # Diagonal spring  coefficients (N/m)  for the block
 
     # b_d_block:          [40.0, 40.0, 40.0,  2.0,  2.0,  2.0]  # Diagonal damping coefficients (Ns/m) for the block
     b_d_block:          [25.0, 25.0, 25.0,  2.0,  2.0,  2.0]  # Diagonal damping coefficients (Ns/m) for the block

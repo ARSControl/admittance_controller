@@ -30,17 +30,17 @@ joy_mode_command_node:
     # Buttons for main mode selection (keep on D-mode, use joy_node for SHANWAN)
     # Default mapping is: A=0, B=1, X=2, Y=3
     buttons.mode_arm: 0         # default: 0
-    buttons.mode_mobile: 3      # default: 2, SHANWAN: 3
-    buttons.mode_whole_body: 4  # default: 3, SHANWAN: 4
+    buttons.mode_mobile: 2      # default: 2, SHANWAN: 3
+    buttons.mode_whole_body: 3  # default: 3, SHANWAN: 4
     buttons.mode_stop: 1        # default: 1
-    buttons.toggle_joy_active_start: 11 # START, default: 6, SHANWAN: 11
+    buttons.toggle_joy_active_start: 6 # START, default: 6, SHANWAN: 11
 
     # Arm sub-mode buttons (event-based, latched)
     # Press R1 -> switch arm to JOINT mode
     # Press L1 -> switch arm to CARTESIAN cmd_vel mode
     # (legacy buttons.arm_joint_mode is also supported by the node)
-    buttons.arm_joint_mode_l1: 6  # default: 9, SHANWAN: 6
-    buttons.arm_joint_mode_r1: 7  # default: 10, SHANWAN: 7
+    buttons.arm_joint_mode_l1: 9  # default: 9, SHANWAN: 6
+    buttons.arm_joint_mode_r1: 10 # default: 10, SHANWAN: 7
 
     # Axis deadzone
     axis_deadzone: 0.05
@@ -59,8 +59,8 @@ joy_mode_command_node:
     # Analog triggers used as modifiers in arm joint mode:
     # if axis value is < trigger_pressed_threshold, trigger is considered pressed
     # L2 adds joints 3-4, R2 adds joints 5-6
-    axes.arm_pair_34_trigger: 5       # L2, default: 4, SHANWAN: 5
-    axes.arm_pair_56_trigger: 4       # R2, default: 5, SHANWAN: 4
+    axes.arm_pair_34_trigger: 4       # L2, default: 4, SHANWAN: 5
+    axes.arm_pair_56_trigger: 5       # R2, default: 5, SHANWAN: 4
     trigger_pressed_threshold: -0.90
 
     # Mobile-only (X mode) axis mapping
@@ -75,7 +75,7 @@ joy_mode_command_node:
     axes.whole_body_linear_x: 1           # default: 1
     axes.whole_body_linear_y: 0           # default: 0
     axes.whole_body_linear_z: 3           # default: 3
-    axes.whole_body_rotation_trigger: 4   # R2, default: 5, SHANWAN: 4
+    axes.whole_body_rotation_trigger: 5   # R2, default: 5, SHANWAN: 4
 
     # Arm cartesian scales
     scales.arm_linear_x: 0.20
