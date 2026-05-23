@@ -17,11 +17,15 @@ If something doesn't work, try to launch directly the main neobotics code with:
 
     ros2 launch neo_mpo_500-2 bringup.launch.py
 
+# Workspace compilation
+
+    colcon build --symlink-install --parallel-workers $(nproc) --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON --cmake-args -DCMAKE_BUILD_TYPE=Release
+
 # Launch joystick device (on-device)
     
     ros2 run joy game_controller_node --ros-args -r /joy:=/mobile_platform/joy
 
-## Launch joystick app (A-arm only, X-neobotics only, y-all, b-break)
+# Launch joystick app (A-arm only, X-neobotics only, y-all, b-break)
 
     ros2 launch admittance_controller joy_mode_command.launch.py
 
@@ -50,7 +54,7 @@ Launch the driver controller to connect to the robot:
 
 # Launch TCP-world pose publisher
 
-This is the EE pose referred to the world frame, considered the integrated speed motion of the mobile base:
+This is the EE pose referred to the world frame, included the fixed tf between mobile base and arm base link.
 
     ros2 run wbqp_controller tcp_pose_converter
 
@@ -69,6 +73,10 @@ This is the EE pose referred to the world frame, considered the integrated speed
 # Launch app
 
     ros2 run admittance_controller admittance_gui_node
+
+# Launch OptiTrack
+
+    ros2 launch vrpn_client_ros2 sample.launch.py
 
 # Old code prototype
 
